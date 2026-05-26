@@ -1,0 +1,50 @@
+# Local Claude Code state — never publish
+
+# Per-machine / per-session overrides
+settings.local.json
+
+# Runtime state directories
+projects/
+sessions/
+session-env/
+shell-snapshots/
+paste-cache/
+image-cache/
+file-history/
+meta/
+plans/
+scout-reports/
+backups/
+cache/
+
+# Runtime state files
+history.jsonl
+level-up-state.yaml
+mcp-needs-auth-cache.json
+session-registry.yaml
+session-registry-archive.yaml
+statusline.log
+
+# Per-project memory (lives under projects/<slug>/memory/; use MEMORY.md.template)
+MEMORY.md
+!MEMORY.md.template
+
+# OS / language noise
+.DS_Store
+*.pyc
+__pycache__/
+node_modules/
+
+# Secrets
+.env
+.env.*
+!.env.example
+secrets-*
+*.pem
+*.key
+
+# Release-spec documentation (per decisions.md D8: "NO specs/ folder in the public repo")
+# Maintainer-only directory holding the design / decisions / implementation / pre-publish
+# checklist for the publish event itself. Contains literal denylist patterns (business
+# identifiers used as grep arguments) that must never be tracked.
+specs/

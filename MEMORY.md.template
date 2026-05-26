@@ -1,0 +1,57 @@
+# Memory — Cross-Project Index
+
+> Template for `~/.claude/projects/<slug>/memory/MEMORY.md`. Auto-loaded into every session's context.
+> Replace placeholders, delete sections you don't use. Goal: a one-line pointer per topic, no narrative.
+> Soft cap: ≤200 lines so the entire file fits in context. Lines past 200 may be truncated.
+
+Format: one-line pointers. Detail lives in project CLAUDE.md, plan files, or `memory/learnings/`.
+
+---
+
+## Current State (YYYY-MM-DD / S{N} / brief headline)
+
+- **Phase**: <which phase / spec / refactor is active; ≤2 lines>
+- **Next**: <the single next concrete action; quote the artifact you're acting on, don't paraphrase>
+
+- **Session {N} (YYYY-MM-DD)**: <one-line summary>. → `memory/learnings/YYYY-MM-DD-topic.md`
+- **Session {N-1} (YYYY-MM-DD)**: <one-line summary>. → `memory/learnings/YYYY-MM-DD-topic.md`
+- **Session {N-2} (YYYY-MM-DD)**: <one-line summary>. → `memory/learnings/YYYY-MM-DD-topic.md`
+
+---
+
+## Active Projects
+
+### Project A (added YYYY-MM-DD)
+- **Dir**: `path/to/repo` · **Plan**: `path/to/plan.md` · **Learnings**: `path/to/learnings/` ({N} files)
+- <2-4 lines of structural context — decisions, scope, constraints — NOT activity log>
+- **Next**: <single concrete action OR an open question gating progress>
+
+### Project B (added YYYY-MM-DD)
+- **Dir**: `path/to/repo` · **Detail**: `memory/project_<slug>.md`
+- <2-4 lines>
+- **Open before any work**: <preconditions / blockers>
+
+---
+
+## Feedback Memories
+
+> Pointers to longer-form behavioral feedback. Each line: filename — one-sentence summary.
+
+- `feedback_<topic>.md` — <what behavior this corrects or confirms>
+- `feedback_<topic>.md` — <what behavior this corrects or confirms>
+
+---
+
+## References
+
+> External systems where authoritative state lives (issue trackers, dashboards, channels).
+
+- <system name> — <what kind of info lives there + when to consult it>
+
+---
+
+## Bookmarked Prompts
+
+> Reusable prompts you want available without searching. Source + when-to-use.
+
+- **<Prompt name>** (<source>): "<prompt text>"

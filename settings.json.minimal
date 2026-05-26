@@ -1,0 +1,218 @@
+{
+  "env": {
+    "CLAUDE_ANTICHEAT_BLOCK": "1",
+    "CLAUDE_EVAL_FIRST_BLOCK": "1"
+  },
+  "permissions": {
+    "allow": [
+      "Read",
+      "Glob",
+      "Grep",
+      "Agent",
+      "Bash(grep *)",
+      "Bash(cat *)",
+      "Bash(ls *)",
+      "Bash(head *)",
+      "Bash(tail *)",
+      "Bash(find *)",
+      "Bash(wc *)",
+      "Bash(sort *)",
+      "Bash(git log *)",
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(git show *)",
+      "Bash(git branch*)",
+      "WebFetch",
+      "WebSearch"
+    ],
+    "defaultMode": "auto"
+  },
+  "skillOverrides": {
+    "audit-project": "user-invocable-only",
+    "catchup": "user-invocable-only",
+    "connect": "user-invocable-only",
+    "extract-from-senior": "user-invocable-only",
+    "grill-me": "user-invocable-only",
+    "hook-review": "user-invocable-only",
+    "learn-book": "user-invocable-only",
+    "level-up": "user-invocable-only",
+    "prune-memory": "user-invocable-only",
+    "scout": "user-invocable-only",
+    "telemetry": "user-invocable-only"
+  },
+  "hooks": {
+    "Notification": [
+      {
+        "matcher": "permission_prompt",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ \"$(uname)\" = \"Darwin\" ]; then afplay /System/Library/Sounds/Glass.aiff; elif command -v powershell >/dev/null 2>&1; then powershell -c '[Console]::Beep(800, 300)'; fi",
+            "timeout": 5000
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo 'File modified — remember to run relevant check commands before committing'",
+            "timeout": 3000
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ \"$(uname)\" = \"Darwin\" ]; then afplay /System/Library/Sounds/Pop.aiff; elif command -v powershell >/dev/null 2>&1; then powershell -c '[Console]::Beep(600, 200)'; fi && echo 'Turn complete. If there are pending tasks in the todo list, continue with the next one. Otherwise, check status line for context usage.'",
+            "timeout": 5000
+          }
+        ]
+      }
+    ],
+    "StopFailure": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ \"$(uname)\" = \"Darwin\" ]; then afplay /System/Library/Sounds/Sosumi.aiff; elif command -v powershell >/dev/null 2>&1; then powershell -c '[Console]::Beep(400, 500)'; fi && echo 'API error — rate limited or auth failure. Wait before retrying. Check status line for rate limit usage.'",
+            "timeout": 5000
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/hooks/precompact-guard.js\"",
+            "timeout": 5000
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e \"const input = JSON.parse(process.env.CLAUDE_TOOL_INPUT || '{}'); if (input.command && input.command.includes('git push')) { process.stdout.write('WARN: About to push to remote — confirm before proceeding'); }\"",
+            "if": "Bash(git push*)",
+            "timeout": 3000
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/skills/careful/scripts/check-destructive.js\"",
+            "timeout": 3000
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/skills/review/scripts/check-review-gate.js\"",
+            "timeout": 3000
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/hooks/check-anticheat.js\"",
+            "timeout": 5000
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/hooks/check-eval-first.js\"",
+            "timeout": 5000
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/hooks/check-cd-persistence.js\"",
+            "timeout": 3000
+          }
+        ]
+      },
+      {
+        "matcher": "Skill",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/hooks/check-skill-slug.js\"",
+            "timeout": 3000
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/skills/freeze/scripts/check-freeze.js\"",
+            "timeout": 3000
+          },
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/hooks/memory-size-gate.js\"",
+            "timeout": 2000
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/hooks/context-wrap-trigger.js\"",
+            "timeout": 3000
+          }
+        ]
+      }
+    ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "bash $HOME/.claude/statusline.sh",
+    "padding": 0
+  },
+  "autoCompactEnabled": false,
+  "alwaysThinkingEnabled": true,
+  "autoMode": {
+    "hard_deny": [
+      "Bash(rm -rf /)",
+      "Bash(rm -rf /*)",
+      "Bash(rm -rf ~)",
+      "Bash(rm -rf ~/*)",
+      "Bash(rm -rf $HOME)",
+      "Bash(rm -rf $HOME/*)"
+    ]
+  }
+}
