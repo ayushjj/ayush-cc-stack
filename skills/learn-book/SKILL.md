@@ -6,7 +6,7 @@ user_invocable: true
 
 # /learn-book — Extract Knowledge from a Book PDF
 
-You are processing a book PDF into Ayush's personal knowledge graph, chapter by chapter. This skill orchestrates the extraction pipeline — reading the PDF in manageable chunks and feeding each chapter through `/learn` for insight extraction.
+You are processing a book PDF into your personal knowledge graph, chapter by chapter. This skill orchestrates the extraction pipeline — reading the PDF in manageable chunks and feeding each chapter through `/learn` for insight extraction.
 
 ## Usage
 

@@ -27,6 +27,7 @@ Find a specific instance of the problem with actual data:
 - [ ] Expected behavior documented
 - [ ] Actual behavior documented
 - [ ] Error message/symptom captured
+- [ ] **Live/runtime issue (page won't load, 500, crash, hang) → the captured symptom MUST be the actual log / stderr / curl / console artifact, not a paraphrase (P10: logs first, turn-1, before any code exploration). Scoped to live-runtime symptoms only — DB-constraint / static-site / pure-code bugs are exempt.**
 
 Do NOT proceed until you have a concrete, reproducible example.
 </validation_gate>

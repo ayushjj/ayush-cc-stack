@@ -19,4 +19,4 @@ Narrowing a maker rule without updating the paired checker row let the checker f
 - Distinct from P38 (schema asymmetry — single-component justification-required-on-one-branch bias)
 
 ## Migration note
-Externalized 2026-04-28 during a CLAUDE.md compression pilot. Original full inline text preserved verbatim above; CLAUDE.md retains T1 + T2 (detection + fix + applies-to) for reactive firing.
+Externalized 2026-04-28 as part of CLAUDE.md compression pilot. Original full inline text preserved verbatim above; CLAUDE.md retains T1 + T2 (detection + fix + applies-to) for reactive firing.

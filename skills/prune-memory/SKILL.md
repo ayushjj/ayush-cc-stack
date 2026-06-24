@@ -30,7 +30,7 @@ Candidate criteria (conservative — when in doubt, keep):
 - Historical sections (e.g., "AI-Native Blueprint review X", "RFC v1→v2 pass Y") that have full narratives already in `learnings/` files
 
 **CLAUDE.md Mistake rows**:
-- Rows with `Times: 1x` AND `Last` date > 90 days ago
+- Rows with `Times: 1x` AND `Last` date > 30 days ago (recalibrated from 90d on 2026-05-31 — velocity-adjusted; see governance.md § Table-management policy. Eviction *age* only; prune *cadence* stays 90d.)
 - Rows whose content is fully subsumed by a Principle (e.g., row says "X" and Principle P{N} says the same with more generality)
 
 **CLAUDE.md Principles**:
@@ -47,7 +47,7 @@ Show user the candidates as a table:
 | # | File | Entry (1-line summary) | Why candidate | → Archive destination |
 |---|------|------------------------|---------------|----------------------|
 | 1 | MEMORY.md | Session N (YYYY-MM-DD) entry | Not in Current State's 2 most-recent window | MEMORY-archive.md |
-| 2 | CLAUDE.md Mistake | "Deployed fix without verifying live endpoint" (1x, 2026-03-06) | 1x AND >90 days old | MEMORY-archive.md (new section for mistakes) or archived-principles.md |
+| 2 | CLAUDE.md Mistake | "Deployed fix without verifying live endpoint" (1x, 2026-03-06) | 1x AND >30 days old | MEMORY-archive.md (new section for mistakes) or archived-principles.md |
 | 3 | CLAUDE.md P15 | "Automated tests primary, manual supplementary" | Not grep-referenced in learnings or commits in 60 days | archived-principles.md |
 ```
 
@@ -107,3 +107,27 @@ Archived:   3 Session-deltas to MEMORY-archive.md
 - `/catchup` State-health line shows CLAUDE.md > 50 KB or > 400 lines
 - Quarterly scheduled review (check `(last prune: YYYY-MM-DD)` comment in CLAUDE.md header — if > 90 days old, run)
 - A `memory-size-gate` hook stderr warning surfaced during a session and you want to address it deliberately
+
+## Step 8: Public-stack drift check (P57 trigger — runs at the END, after Step 7)
+
+The public stack snapshot shares this quarterly cadence (governance.md § Quarterly cadences, decisions D5). Its cadence was previously wired to nothing — a P57 silent-lapse. Bake the check in here so it fires by invocation, not memory. **Graceful no-op**: if the publish target isn't configured, this whole block does nothing — `/prune-memory` is load-bearing and must never error on a missing publish config.
+
+```bash
+CFG="$HOME/.claude/.publish-stack-target"
+if [ -f "$CFG" ]; then
+  TGT=$(grep -vE '^#|^[[:space:]]*$' "$CFG" | sed -n 1p)   # first non-comment line = repo path
+  if [ -n "$TGT" ] && [ -d "$TGT/.git" ]; then
+    SINCE=$(git -C "$TGT" log -1 --format=%cd --date=short 2>/dev/null)
+    DRIFT=$(git -C "$HOME/.claude" log --since="$SINCE" --oneline \
+              -- CLAUDE.md governance.md principles/ hooks/ skills/ 2>/dev/null | wc -l | tr -d ' ')
+    if [ "${DRIFT:-0}" -gt 0 ]; then
+      echo "📦 Public stack drift: ${DRIFT} commit(s) to shareable files since last snapshot (${SINCE})."
+      echo "   Run /publish-stack to prepare the next quarterly snapshot (decisions D5)."
+    else
+      echo "Public stack: no shareable drift since ${SINCE} — skip snapshot (D5 forbids no-ops)."
+    fi
+  fi
+fi
+```
+
+The nudge is the correct seam (not an auto-run): the publish itself is human-gated (D7 — user runs the final sweep + push). Do NOT invoke `/publish-stack` automatically from here.

@@ -18,4 +18,4 @@ A rule of shape "foreign-key ∈ {curated brand list} = supplier" had FN risk (r
 → Full narrative preserved in private OS learnings.
 
 ## Migration note
-Externalized 2026-04-28 during a CLAUDE.md compression pilot. Original full inline text preserved verbatim above (trigger + detection + applies-to + cross-refs + worked example); CLAUDE.md retains T1 + T2 (detection + applies-to + cross-refs) for reactive firing.
+Externalized 2026-04-28 as part of CLAUDE.md compression pilot. Original full inline text preserved verbatim above (trigger + detection + applies-to + cross-refs); CLAUDE.md retains T1 + T2 (detection + applies-to + cross-refs) for reactive firing.

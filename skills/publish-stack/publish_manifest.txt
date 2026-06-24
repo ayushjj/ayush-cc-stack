@@ -1,0 +1,59 @@
+# publish_manifest.txt — the curated allowlist for /publish-stack.
+#
+# This is the single source of truth for WHAT gets copied from the private
+# ~/.claude OS into the public stack snapshot. Anything not listed here is
+# never copied. Edit this file (not the helper) to add/remove published items.
+#
+# Universal by construction (P68): contains skill/hook/principle NAMES only —
+# no business names, paths, or IDs. Safe to publish.
+#
+# Syntax:
+#   file:<relpath>     copy a single top-level file from source → target
+#   dir:<relpath>      copy every file in this directory (principles renumbered)
+#   skill:<name>       copy skills/<name>/ as a unit
+# Lines starting with # and blanks are ignored.
+#
+# NOT listed here (and why) — these are PUBLIC-ONLY curated artifacts that do
+# NOT exist in ~/.claude and must never be touched/deleted by the sync:
+#   README.md, LICENSE, MEMORY.md.template, settings.json.minimal,
+#   skills/README.md, hooks/README.md, learnings/  (hand-maintained)
+
+# ---- top-level files (exist in ~/.claude) ----
+file:CLAUDE.md
+file:governance.md
+file:settings.json
+file:statusline.sh
+
+# ---- managed directories (mirror by copy; principles renumbered P50→P01) ----
+dir:principles
+dir:hooks
+
+# ---- skills: Tier 1 workflow core (decisions.md D3) ----
+skill:catchup
+skill:wrapping-session
+skill:premise-check
+skill:creating-specifications
+skill:researching-before-planning
+skill:review-plan
+skill:review
+skill:investigating-problems
+skill:freeze
+skill:careful
+skill:prune-memory
+skill:hook-review
+
+# ---- skills: Tier 2 knowledge-management (D3) ----
+skill:learn
+skill:learn-book
+skill:level-up
+skill:scout
+
+# ---- skills: Tier 3 ship-if-clean (D3) ----
+skill:prompt-engineering
+skill:data-analysis
+skill:connect
+skill:telemetry
+
+# ---- skills: universal maintenance loop (added post-D3; confirm via O2) ----
+skill:skill-audit
+skill:publish-stack

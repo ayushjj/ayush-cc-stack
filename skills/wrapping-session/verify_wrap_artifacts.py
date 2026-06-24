@@ -32,6 +32,12 @@ Checks:
      '## Current State' and the next '## ' heading).
   3. implementation.md latest session blockquote ≤30 lines (between
      '## Session Outcome Record (Latest)' and '### Prior Sessions').
+  4. implementation.md coverage-freshness (opt-in): if a
+     '<!-- coverage-synced: S<N> -->' marker exists, WARN when it lags the
+     latest Session Outcome Record session. Absence-tolerant — no marker,
+     no check (so marker-less projects are unaffected). This is the one
+     FRESHNESS check (vs. the size checks 1-3); added after a coverage/plan
+     surface froze ~49 sessions behind the outcome-record head (P62/P57).
 
 MUST-PRESERVE invariants (NOT enforced here — the verifier checks size,
 not structure; structural correctness still relies on skill discipline):
@@ -185,6 +191,61 @@ def check_implementation(impl_path: Path) -> list[str]:
     return issues
 
 
+def check_coverage_freshness(impl_path: Path) -> list[str]:
+    """Warn when an implementation.md coverage matrix has gone stale relative
+    to the latest Session Outcome Record.
+
+    ABSENCE-TOLERANT BY DESIGN (P68 / cross-project blast radius): a project
+    opts in by placing a `<!-- coverage-synced: S<N> -->` marker in its
+    implementation.md. No marker → INFO-skip (every marker-less project's wrap
+    is unaffected). Only when the marker EXISTS do we parse the latest session
+    from the '## Session Outcome Record (Latest)' block and flag a lag.
+
+    This is the one freshness (vs. size) check in this verifier — added after a
+    spec's coverage/plan surface froze for ~49 sessions while the outcome-record
+    head stayed current (P62 spec/impl drift; P57 silent-gate). A revise-surface
+    with no forcing function rots silently; this makes the lag loud, not absent."""
+    if not impl_path.exists():
+        return []  # already INFO-reported by check_implementation
+    text = impl_path.read_text()
+    sync_m = re.search(r"<!--\s*coverage-synced:\s*S(\d+)\s*-->", text)
+    if not sync_m:
+        return [
+            "INFO: implementation.md has no '<!-- coverage-synced: S<N> -->' marker "
+            "(skipping coverage-freshness check). Add one beside a coverage/plan matrix "
+            "to opt this project in."
+        ]
+    synced = int(sync_m.group(1))
+    # Parse the latest session from the outcome-record block's first session ref.
+    lines = text.splitlines()
+    start = None
+    for i, line in enumerate(lines):
+        if line.startswith("## Session Outcome Record (Latest)"):
+            start = i
+            break
+    if start is None:
+        return [
+            "INFO: coverage-synced marker present but no '## Session Outcome Record "
+            "(Latest)' header to compare against (skipping coverage-freshness check)."
+        ]
+    block = "\n".join(lines[start + 1:start + 12])
+    sess_m = re.search(r"Session\s+(\d+)|(?<![A-Za-z])S(\d+)\b", block)
+    if not sess_m:
+        return [
+            "INFO: coverage-synced marker present but could not parse a session number "
+            "from the latest Session Outcome Record (skipping coverage-freshness check)."
+        ]
+    current = int(sess_m.group(1) or sess_m.group(2))
+    if current > synced:
+        return [
+            f"FAIL: implementation.md coverage matrix is stale — coverage-synced=S{synced} "
+            f"but latest Session Outcome Record=S{current} (lag {current - synced}). "
+            f"Reconcile the coverage/build-state matrix and bump the marker to S{current}. "
+            f"A perpetually-fresh outcome-record head masks a frozen plan body (P62)."
+        ]
+    return []
+
+
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
     p.add_argument("--strict", action="store_true",
@@ -214,6 +275,7 @@ def main() -> int:
     issues += check_memory(args.memory)
     if args.implementation is not None:
         issues += check_implementation(args.implementation)
+        issues += check_coverage_freshness(args.implementation)
 
     fails = [m for m in issues if m.startswith("FAIL:")]
     for msg in issues:

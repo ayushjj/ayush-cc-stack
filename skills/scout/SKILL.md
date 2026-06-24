@@ -7,9 +7,9 @@ effort: high
 
 # /scout — AI Workflow Intelligence Pipeline
 
-You are analyzing AI coding workflow tips and comparing them against Ayush's current Claude Code setup. The user provides a batch of inputs (URLs, pasted text, screenshots) and you produce a structured gap analysis report.
+You are analyzing AI coding workflow tips and comparing them against your current Claude Code setup. The user provides a batch of inputs (URLs, pasted text, screenshots) and you produce a structured gap analysis report.
 
-**This is NOT automated monitoring.** Ayush runs this manually when he has a batch of bookmarked tips to process.
+**This is NOT automated monitoring.** you run this manually when you have a batch of bookmarked tips to process.
 
 ## Input Formats
 
@@ -60,13 +60,13 @@ Report to user: "Extracted N actionable tips from M items (K skipped)."
 
 ## Step 3: Read Current Setup
 
-Read these files to understand Ayush's current Claude Code configuration. **Read all in parallel** where possible:
+Read these files to understand your current Claude Code configuration. **Read all in parallel** where possible:
 
 1. `~/.claude/CLAUDE.md` — current rules, mistake patterns, principles
 2. `~/.claude/settings.json` — hooks, permissions, model settings
 3. `~/.claude/settings.local.json` — local overrides (if exists; skip if missing)
 4. Glob `~/.claude/skills/*/SKILL.md` — list all skills (read only names + descriptions from frontmatter, not full content)
-5. `~/.claude/projects/<your-home-slug>/memory/MEMORY.md` — current memory index (slug derives from `$HOME`)
+5. `~/.claude/projects/C--Users-User/memory/MEMORY.md` — current memory index
 6. `~/desktop/knowledge-graph/graph-index.yaml` — existing insights (for dedup against knowledge graph)
 7. Glob `~/.claude/projects/*/memory/*.md` — scan for user workflow details
    (voice input, editor prefs, parallel sessions, tool choices, stated philosophy).

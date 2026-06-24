@@ -450,24 +450,47 @@ If push fails (auth, hook rejection, race condition), report the failure verbati
 
 **Why push project repo at all** (was previously deferred to user): the prior "user's call" framing relied on agent-attention nudges that failed silently across a multi-session sequence, leaving multiple commits unpushed. The skill already auto-pushes `~/.claude` (Step 8) which has a stricter risk profile (multi-machine sync, secrets-adjacent); the asymmetry was backwards.
 
+### 7c: Sync external backup targets (conditional)
+
+Some sessions touch notes/specs/research that live in a git repo *outside* the current project — e.g. a personal notes folder nested inside another checkout, gitignored there so it's pushed nowhere on its own. The wrap is the reliable trigger to back these up; a "remember to run it manually" command never gets run.
+
+```bash
+bash "$HOME/.claude/skills/wrapping-session/sync_external_backups.sh"
+```
+
+The helper reads `$HOME/.claude/.wrap-backup-targets` (machine-local, gitignored — one absolute repo path per line). For each listed path that is a git work-tree with an `origin` remote, it stages all, and if anything changed, commits with a timestamp and pushes. Missing config, missing paths, and non-repos are skipped silently — a safe no-op on any machine/project with no targets configured. To add a target: append its absolute path to `.wrap-backup-targets`. Report the helper's per-target output line(s); on a `FAILED` line, surface it but do not block the rest of the wrap.
+
 ## Step 8: Sync ~/.claude to GitHub
 
 ```bash
 printf '%s\t%s\n' "$PPID" "$(ps -p $PPID -o lstart=)" > "$WRAP_MARKER"  # marker refresh
 ```
 
-User runs a multi-machine setup (Mac primary, Windows fallback). `~/.claude/` is a git repo at `github.com/ayushjj/claude-config`.
+`~/.claude/` is a git repo synced to your own private remote. (Some users run a multi-machine setup — a primary OS plus a fallback.)
 
 ```bash
 cd ~/.claude
 if [ -n "$(git status --porcelain)" ]; then
+  # Concurrent-wrap mutex (hooks/git-sync-lock.js) — serialize this add→commit→push
+  # against any other session's Step 8 on the ONE shared ~/.claude index. Without
+  # it, a second session's `git add -A` sweeps this session's unstaged files into
+  # its commit (collision 6× as of 2026-05-31). Records $PPID — the long-lived
+  # Claude Code process, stable across separate Bash calls, so `release` may even
+  # run in a later call. FAIL-OPEN: if the lock isn't free within 60s it warns and
+  # proceeds anyway — a wrap must never hang. (check-wrap-collision.js warns if the
+  # mutex ever has a hole. Escape valve: CLAUDE_GIT_SYNC_LOCK_SKIP=1.)
+  LOCK="$HOME/.claude/hooks/git-sync-lock.js"
+  node "$LOCK" acquire "$PPID" "$(ps -p $PPID -o lstart=)"
   git add -A  # strict .gitignore protects secrets/ephemeral data
   git commit -m "Wrap <YYYY-MM-DD>: <1-line session outcome>"
   git push
+  node "$LOCK" release   # idempotent; safe even if commit/push errored above
 else
   echo "~/.claude/ has no changes to sync."
 fi
 ```
+
+**Known limitation (accepted):** the mutex serializes wraps and prevents index corruption + lost work, but `git add -A` is still spatially greedy — the wrap that holds the lock first sweeps any *other* live session's unstaged ~/.claude edits into its own commit (co-mingling / mis-attribution). Work is never lost, only possibly committed under a sibling session's wrap commit. Fully closing this needs per-session `git worktree` isolation or per-session file manifests — both out of scope for the mutex. See decision `ship-mutex-accept-co-mingling` (2026-05-31).
 
 If push fails with a conflict, report the conflict file list to the user — do NOT force-push. User resolves manually.
 

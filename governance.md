@@ -11,7 +11,7 @@ The agent-facing rules live in `~/.claude/CLAUDE.md`. This file holds the govern
 **Mistake Patterns table** (`~/.claude/CLAUDE.md` § Mistake Patterns):
 - Soft cap ~20 rows.
 - Oldest **1x rows** are archived quarterly to `~/.claude/archived-principles.md` via `/prune-memory`.
-- Eviction criteria (per `/prune-memory` SKILL.md:50): `1x AND >90 days old`.
+- Eviction criteria (per `/prune-memory` SKILL.md:50): `1x AND >30 days old`. **Recalibrated 90→30 on 2026-05-31** (velocity adjustment): at the user's session density (hundreds of recurrence-opportunities/month), a 1x pattern quiet for 30 days has had ample chance to recur and hasn't — calendar-30d is a proxy for recurrence-opportunity-density, not a slow-world calendar window. NOTE: this is the eviction *age* only; the prune *cadence* (when the sweep runs) stays 90d per § Quarterly cadences + the `memory-size-gate` hook. First velocity-prune executed same day: 11 Apr-18→27 rows → `learnings/2026-05-31-mistake-table-velocity-prune.md`.
 - Quarterly cadence: see § Quarterly cadences below for current last-run / next-due dates. The HTML comment header at line 1 of CLAUDE.md is the canonical timestamp surface — `/prune-memory` SKILL.md:72 reads it; do not remove.
 
 **Principles list** (`~/.claude/CLAUDE.md` § Principles):
@@ -33,6 +33,7 @@ Maintenance audits that fire every ~90 days. Aligned so both can run in one main
 |---|---|---|---|---|
 | `/prune-memory` | 90 days | CLAUDE.md mistake table + principles list; per-project MEMORY.md | 2026-05-25 | 2026-08-23 |
 | `/skill-audit` | 90 days | `~/.claude/skills/` + `~/.claude/hooks/` — universality binary gate (D1-D4 denylist regexes sourced from `~/.claude/.skill-audit-patterns`, user-private/gitignored) | 2026-05-26 (initial deploy) | 2026-08-23 |
+| `/publish-stack` | 90 days | Public stack snapshot (`ayush-cc-stack`) — prepare + leak safety-net; user runs final F-checklist sweep + push (decisions D5/D7). Nudged from `/prune-memory` final step | 2026-05-26 (2026-Q2 snapshot) | 2026-08-23 |
 
 Update both `Last run` and `Next due` columns at each invocation. Each skill's SKILL.md also carries its own last-review timestamp (defense in depth — the in-skill timestamp is what `/catchup` surfaces if this table drifts).
 

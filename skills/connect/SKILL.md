@@ -6,7 +6,7 @@ user_invocable: true
 
 # /connect — Strengthen the Knowledge Graph
 
-You are scanning Ayush's knowledge graph for missing connections between existing insights. The graph grows by adding new nodes (/learn), but older nodes never get updated to link to newer ones. Your job: find and fix these gaps.
+You are scanning your knowledge graph for missing connections between existing insights. The graph grows by adding new nodes (/learn), but older nodes never get updated to link to newer ones. Your job: find and fix these gaps.
 
 ## Step 1: Read Graph Index
 

@@ -30,19 +30,20 @@
       "WebFetch",
       "WebSearch"
     ],
+    "ask": [
+      "Skill(arena)",
+      "Skill(audit-project)",
+      "Skill(automate-me)",
+      "Skill(connect)",
+      "Skill(learn-book)",
+      "Skill(level-up)"
+    ],
     "defaultMode": "auto"
   },
   "skillOverrides": {
-    "audit-project": "user-invocable-only",
     "catchup": "user-invocable-only",
-    "connect": "user-invocable-only",
-    "extract-from-senior": "user-invocable-only",
-    "grill-me": "user-invocable-only",
     "hook-review": "user-invocable-only",
-    "learn-book": "user-invocable-only",
-    "level-up": "user-invocable-only",
     "prune-memory": "user-invocable-only",
-    "scout": "user-invocable-only",
     "skill-audit": "user-invocable-only",
     "telemetry": "user-invocable-only"
   },
@@ -167,6 +168,16 @@
         ]
       },
       {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/hooks/check-wrap-collision.js\"",
+            "timeout": 3000
+          }
+        ]
+      },
+      {
         "matcher": "Skill",
         "hooks": [
           {
@@ -213,7 +224,8 @@
     "frontend-design@claude-plugins-official": false,
     "code-review@claude-plugins-official": false,
     "compound-engineering@compound-engineering-plugin": true,
-    "expo@expo-plugins": true
+    "expo@expo-plugins": true,
+    "security-guidance@claude-plugins-official": true
   },
   "extraKnownMarketplaces": {
     "compound-engineering-plugin": {
@@ -240,7 +252,9 @@
     ]
   },
   "alwaysThinkingEnabled": true,
-  "effortLevel": "xhigh",
+  "effortLevel": "high",
+  "fallbackModel": ["claude-opus-4-7", "claude-sonnet-4-6"],
+  "skipWorkflowUsageWarning": true,
   "autoCompactEnabled": false,
   "skipAutoPermissionPrompt": true,
   "autoMode": {

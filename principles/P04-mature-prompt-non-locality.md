@@ -27,4 +27,4 @@ A structural-only top-of-prompt clause for a new input field (33 lines, no exemp
 - A project-side decisions log codifies the structural-fix corollary as the "Code → Codebook → Prompt" refit-layer policy.
 
 ## Migration note
-Externalized 2026-04-28 during a CLAUDE.md compression pilot. Original full inline text preserved verbatim above (both incidents + corollary + structural-fix + applies-to); CLAUDE.md retains T1 + T2 (detection + corollary + structural-fix + applies-to) for reactive firing.
+Externalized 2026-04-28 as part of CLAUDE.md compression pilot. Original full inline text preserved verbatim above (both incidents + corollary + structural-fix + applies-to); CLAUDE.md retains T1 + T2 (detection + corollary + structural-fix + applies-to) for reactive firing.

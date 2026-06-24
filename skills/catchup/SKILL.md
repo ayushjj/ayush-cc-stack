@@ -65,6 +65,12 @@ Run these in a single parallel tool-call batch:
    - Slug construction: `pwd | sed 's|/|-|g'` produces the harness's projects-directory slug from the current working directory. This targets the LIVE MEMORY.md exactly — avoids the P42 "multiple slugs" mistake where `find ... -path "*basename*"` can match archived or cross-machine variants.
    - Soft thresholds (append "— consider `/prune-memory`" suffix if exceeded): MEMORY.md > 20 KB OR > 200 lines; CLAUDE.md > 50 KB OR > 400 lines. Advisory only — no action required.
 
+7. **PR-status drift check** (closes the "memory says awaiting, PR is actually merged" gap — P42 resolved-status-pointer-drift). MEMORY.md is auto-loaded, so its text is already in context; the failure mode is *trusting* a status word instead of *verifying* it. From the auto-loaded MEMORY.md, extract every PR number (`#\d+`) sitting near a live-status word (`awaiting|pending|open|in review|in-review|review|blocked|WIP`). For each such number, verify against the tracker by key — works even when the PR was merged in a *different worktree/branch* this repo's `git log` never sees:
+   ```bash
+   for n in 580 581; do gh pr view "$n" --json number,state,mergedAt,baseRefName 2>/dev/null; done
+   ```
+   (Substitute the actual extracted numbers; if `gh` is unavailable/offline, skip silently.) Flag any whose real `state` is `MERGED`/`CLOSED` while memory calls them live — that's drift to surface in Step 3 and, if found, to **fix in MEMORY.md before presenting** (the stale pointer otherwise wins in-context next session too). Bounded: a handful of `gh` calls keyed on PR number, no full-repo scan. Skip the whole step if MEMORY.md names no live-status PRs.
+
 ## Step 2: Staleness Check
 
 Compare:
@@ -72,6 +78,12 @@ Compare:
 - The `git status -sb` branch line (Step 1 item 2): if it shows `[behind N]`, the upstream moved since last session — warn: "Local branch is N commits behind {upstream} — teammates pushed. Integrate (after committing/stashing your own work) before starting new work; branch any new feature branches off the fresh upstream."
 
 If git is >1 day ahead of MEMORY.md's stated date, warn: "MEMORY.md may be stale — last wrap was {date} but commits exist from {date}. Relying on git log and implementation plan instead."
+
+**Weekly-cadence nudge** (advisory, fail-silent — include in the Step 1 parallel batch): check whether `/automate-me` is due (>7 days since last run, or never run). Prints nothing unless due.
+```bash
+node -e "const fs=require('fs');try{const m=fs.readFileSync(process.env.HOME+'/.claude/automate-me-state.yaml','utf8').match(/last_run:\s*(.+)/);const v=m&&m[1].trim().replace(/[\"']/g,'');if(!v||v==='null'){console.log('💡 /automate-me: never run — mine recent sessions for repeated workflows worth a skill')}else{const d=Math.floor((Date.now()-Date.parse(v))/86400000);if(d>=7)console.log('💡 /automate-me: '+d+'d since last run — due for a workflow-pattern scan')}}catch(e){}"
+```
+If it prints, surface the line in the Step 3 summary (see **Cadence** line). Advisory only — no action required.
 
 ## Step 3: Present 5-line Summary
 
@@ -82,6 +94,7 @@ If git is >1 day ahead of MEMORY.md's stated date, warn: "MEMORY.md may be stale
 **Recent files**: [2-3 most-changed files from git log]
 **Watch out**: [CLAUDE.md mistake-table entries with Last date ≤3 days ago, or "None"]
 **State health**: [from Step 1 item 5 — e.g., "MEMORY.md 97L/14K, CLAUDE.md 215L/35K" or "State health: unavailable"; append "— consider `/prune-memory`" if over soft threshold]
+**Cadence**: [the Step 2 /automate-me nudge line if it printed, else omit this line entirely]
 ```
 
 ## Step 4 (only if `/catchup all`): Cross-project Table

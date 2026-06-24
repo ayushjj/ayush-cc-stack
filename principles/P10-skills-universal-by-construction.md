@@ -31,7 +31,7 @@ A skill or hook FAILS universality iff a grep over the file matches any of:
 Two regex-collision cases are intentional and excluded from contamination count:
 
 - `scout/SKILL.md` uses `R1`–`R7` as its own self-review rule labels. `level-up/SKILL.md` references `Run self-review R1-R7 (scout Step 5.5)` as a cross-skill pointer. Both are skill-internal nomenclature, NOT project-coupled rule IDs.
-- `\bS[0-9]{2,3}\b` correctly catches session IDs (3-digit-anchored in practice); single-digit session IDs would collide with unrelated codes but that pattern is rare.
+- `\bS[0-9]{2,3}\b` correctly catches session IDs (3-digit-anchored in practice); single-digit `S1`–`S9` would collide with unrelated codes but that pattern is rare.
 
 When a D-grep fires on these lines, count them as carve-outs (effective contamination unchanged).
 

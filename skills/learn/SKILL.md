@@ -6,7 +6,7 @@ user_invocable: true
 
 # /learn — Add Knowledge to the Graph
 
-You are processing content into Ayush's personal knowledge graph. The user will provide content in one of three ways:
+You are processing content into your personal knowledge graph. The user will provide content in one of three ways:
 1. **A URL** (starts with `http://` or `https://`) — you fetch and extract it
 2. **A file path** — you read and extract it
 3. **Raw text** (pasted article, tweet thread, conversation summary, or notes) — you extract directly
@@ -63,10 +63,10 @@ This evidence base is internal working material (not shown to user or written to
 
 ## Step 0.75: Save Raw Source
 
-Save the full source text to `~/desktop/knowledge-graph/sources/` so it can be referenced later for fact-checking, deeper extraction, or if the original goes offline.
+Save the full source text to `~/dev/knowledge-graph/sources/` so it can be referenced later for fact-checking, deeper extraction, or if the original goes offline.
 
 1. **Determine the source slug:** Use `{author-handle}-{article-slug}` format (e.g., `nicbstme-ai-agents-financial-services`, `karpathy-llm-knowledge-bases`, `boris-cherny-yc-light-cone`). Keep it short but identifiable.
-2. **Write the file** to `~/desktop/knowledge-graph/sources/{source-slug}.md` with this structure:
+2. **Write the file** to `~/dev/knowledge-graph/sources/{source-slug}.md` with this structure:
 
 ```markdown
 ---
@@ -89,8 +89,8 @@ type: article  # article | tweet | transcript | book-chapter | raw-notes
 ## Step 1: Read Current State
 
 Before doing anything:
-1. Read `~/desktop/knowledge-graph/graph-index.yaml` — this gives you every existing node's title, description, topics, and link structure in a single file read
-2. Read `~/desktop/knowledge-graph/index.md` to understand the topic structure and recent additions
+1. Read `~/dev/knowledge-graph/graph-index.yaml` — this gives you every existing node's title, description, topics, and link structure in a single file read
+2. Read `~/dev/knowledge-graph/index.md` to understand the topic structure and recent additions
 
 **Do NOT glob or read individual insight files.** The graph index contains all metadata needed to find connection opportunities. Only read a full insight file if you need to update it (e.g., it overlaps with new content).
 
@@ -118,7 +118,7 @@ After extracting insights but BEFORE creating any files, verify each proposed in
 
 ## Step 3: Create Insight Files
 
-For each insight, create a file in `~/desktop/knowledge-graph/insights/`.
+For each insight, create a file in `~/dev/knowledge-graph/insights/`.
 
 Read `references/frontmatter-template.md` for the file structure, naming conventions, title quality bar, and wikilink rules. Include `source_file: sources/{source-slug}.md` in the frontmatter, pointing to the file saved in Step 0.75. Multiple insights from the same source share the same `source_file` value.
 
@@ -127,7 +127,7 @@ Read `references/topics.md` for valid topic slugs in each domain.
 ## Step 4: Update Topic MOCs
 
 For each topic that received new insights:
-1. Read the topic file (e.g., `~/desktop/knowledge-graph/topics/ai-agents.md`)
+1. Read the topic file (e.g., `~/dev/knowledge-graph/topics/ai-agents.md`)
 2. Add a link under the `## Insights` section: `- [[insight-slug]] — one-line description`
 3. If you notice a cluster forming (3+ related insights), add or update a theme under `## Key Themes`
 
@@ -143,7 +143,7 @@ If any insight spans 3+ topics, also add it to `## Cross-Domain Insights`.
 
 ## Step 6: Update Graph Index
 
-Update `~/desktop/knowledge-graph/graph-index.yaml` with the new nodes.
+Update `~/dev/knowledge-graph/graph-index.yaml` with the new nodes.
 
 **Batch all changes into one edit operation.** Compose the full set of new node entries mentally, then apply them in a single Edit call. Do not make multiple sequential edits to this file — each edit re-reads the file and wastes time.
 
