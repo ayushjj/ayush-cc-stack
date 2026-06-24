@@ -91,7 +91,7 @@ Estimated cost: 4-skill update + plan + review-plan + smoke-test in 3 environmen
 
 Out-of-scope items recorded for later:
 
-1. **`/catchup` "missing project CLAUDE.md" check** — when entering a project directory, `/catchup` should detect if project-level CLAUDE.md exists and surface as a state-health flag if absent. Procurement-intelligence drifted for 53 sessions without one before this was caught manually. Adds recurrence prevention so the next greenfield project is auto-prompted.
+1. **`/catchup` "missing project CLAUDE.md" check** — when entering a project directory, `/catchup` should detect if project-level CLAUDE.md exists and surface as a state-health flag if absent. One project drifted for dozens of sessions without a project-level CLAUDE.md before this was caught manually. Adds recurrence prevention so the next greenfield project is auto-prompted.
 
 2. **MEMORY.md audience-split conversation** — same agent-vs-maintainer separation might apply to per-project MEMORY.md. Not investigated here.
 

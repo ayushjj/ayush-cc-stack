@@ -48,7 +48,7 @@ if [ -z "$SEED" ]; then
 fi
 ST="$(mktemp -d)"
 printf 'synthetic leak %s here\n' "$SEED" > "$ST/selftest.txt"
-if ! grep -rE "${D1}" "$ST" >/dev/null 2>&1; then
+if ! grep -riE "${D1}" "$ST" >/dev/null 2>&1; then
   echo "SELF-TEST FAILED: scanner did not catch a seeded token — gate is broken, do NOT trust a clean result." >&2
   rm -rf "$ST"; exit 3
 fi
@@ -68,9 +68,9 @@ report() {  # name, pattern, "scoped"|"full"
     for d in skills principles hooks learnings README.md; do
       [ -e "$TARGET/$d" ] && scope+=("$TARGET/$d")
     done
-    hits=$(grep -rnE "$pattern" "${scope[@]}" 2>/dev/null)
+    hits=$(grep -rniE "$pattern" "${scope[@]}" 2>/dev/null)
   else
-    hits=$(grep -rnE "$pattern" "$TARGET" --exclude-dir=.git --exclude-dir=specs 2>/dev/null)
+    hits=$(grep -rniE "$pattern" "$TARGET" --exclude-dir=.git --exclude-dir=specs 2>/dev/null)
   fi
   if [ -z "$hits" ]; then
     printf '  %-28s PASS\n' "$name"

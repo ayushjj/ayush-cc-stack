@@ -102,7 +102,7 @@ Total: **6 agents** (5 universal + 1 language-specific), all launched in paralle
 For each agent, include:
 - The list of changed code files
 - The full content of each changed file (read them before launching agents)
-- Project context: brief description from CLAUDE.md or auto-detected (e.g., "Python data pipeline for procurement intelligence" or "Astro static site with React islands")
+- Project context: brief description from CLAUDE.md or auto-detected (e.g., "Python ETL pipeline for log analytics" or "Astro static site with React islands")
 - **Review checklist**: Read `~/.claude/skills/review/checklist.md` and include its contents in every agent prompt. Instruct agents: "Flag any finding that matches a checklist item. Cite the checklist item number."
 
 ### 6. Synthesize results
