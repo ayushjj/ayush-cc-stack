@@ -17,15 +17,19 @@ addresses the precedent failure mode flagged in CLAUDE.md mistakes table:
 "Compressed a growth-prone persistent file (MEMORY.md) without installing
 a growth-rate governor — forward review blind to the bloat pattern."
 
-Default mode: WARN — print diagnostic to stderr, exit 0. Allows
-incremental adoption: first wraps may have legitimate reasons to exceed
-caps if a session was unusually complex; the WARN gives diagnostic without
-blocking the wrap.
-
-Strict mode (--strict): exit 1 on any FAIL. Wire in once shapes prove
-stable (target: 3 consecutive clean wraps).
+Modes: --strict exits 1 on any FAIL; default is WARN (exit 0, diagnostics only).
+ENFORCING since 2026-07-09: wrap Step 7a invokes --strict before the project
+commit; the Step 5.5 inline cap-check keeps the WARN default as a write-time
+early warning. (The prior "wire in after 3 consecutive clean wraps" activation
+was the same unreachable condition that left verify_claude_md.py dead for 66
+days — a gate can't wait for the backlog it exists to prevent to clear itself.)
 
 Checks:
+  0. session-registry is VALID YAML (S331). Not a compression check — a validity
+     one — but it lives here because this is the only thing that reads the registry
+     at wrap time. The file had not parsed for 60+ wrap commits and nothing noticed,
+     because every consumer reads it line-based. Fails CLOSED on a parse error;
+     prints CANNOT CHECK, never silence, when no parser is reachable.
   1. session-registry top label ≤300 chars (cap: lenient initial; tighten
      to ≤200 if drift returns).
   2. MEMORY.md Current State block ≤30 non-blank lines (everything between
@@ -59,6 +63,7 @@ from __future__ import annotations
 
 import argparse
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -73,6 +78,110 @@ MEMORY_CAP_LINES = 30
 MEMORY_CAP_CHARS = 2500   # ~15 bullets @ ~150 chars each
 IMPL_CAP_LINES = 30
 IMPL_CAP_CHARS = 2500     # same budget — bullet form, not paragraph essay
+
+
+# Ruby is the CANONICAL parser for this check, with PyYAML only as a fallback when ruby
+# is unreachable. Not arbitrary: the two disagree about the same file (psych rejects
+# anchors unless `aliases: true`; `yaml.safe_load` resolves them silently), and a
+# BLOCKING gate whose verdict depends on which parser a machine happens to have is worse
+# than no gate. One parser decides; the other only prevents a silent CANNOT CHECK.
+#
+# `safe_load(File.read(...))`, NOT `load_file(path, permitted_classes:)` — the keyword
+# form is psych >= 3.3 (Ruby 3.0+) only. This box carries TWO rubies: rbenv's 3.4.7 and
+# /usr/bin/ruby 2.6.10, and PATH decides which one a wrap gets. Under 2.6.10 the keyword
+# form raises `ArgumentError: unknown keyword: permitted_classes` — a NON-ZERO exit that
+# the first draft of this check reported as "registry is not valid YAML", i.e. it blocked
+# every wrap on every project and blamed an apostrophe that did not exist. Measured on
+# both rubies: the form below returns PARSE_OK on a valid file and a Psych error on a
+# broken one, identically. `permitted_classes` covers the unquoted `date:` values.
+_RUBY_PROBE = (
+    "require 'yaml'; require 'date'; "
+    "YAML.safe_load(File.read(ARGV[0]), permitted_classes: [Date, Time]); "
+    "STDOUT.puts 'PARSE_OK'"
+)
+
+# Only these mean "the FILE is bad". Anything else on stderr means the PARSER is bad,
+# which must degrade to CANNOT CHECK rather than accuse the registry.
+_PARSER_FAULT_MARKERS = ("Psych::SyntaxError", "Psych::DisallowedClass",
+                         "Psych::AliasesNotEnabled", "Psych::BadAlias")
+
+# The apostrophe remedy is the right hint for a SYNTAX fault and wrong for everything
+# else. It is the operator's primary debugging artifact — the gate blocks the wrap — so
+# it is gated on the error actually being a syntax error rather than appended blindly.
+_APOSTROPHE_HINT = ("Almost always an unescaped apostrophe inside a single-quoted "
+                    "label/next scalar: double it ('' not '). ")
+
+
+def _one_line(value: object) -> str:
+    """First non-empty line of an error, trimmed — the rest is a backtrace."""
+    for line in str(value).strip().split("\n"):
+        if line.strip():
+            return line if len(line) <= 200 else line[:197] + "..."
+    return "(no diagnostic)"
+
+
+def _fail(detail: str, *, syntax: bool) -> list[str]:
+    hint = _APOSTROPHE_HINT if syntax else ""
+    return [f"FAIL: session-registry is not valid YAML — {detail}. "
+            f"{hint}Fix before committing."]
+
+
+def check_registry_parses(registry_path: Path) -> list[str]:
+    """The registry must be VALID YAML — not merely greppable.
+
+    Why this exists (S331, 2026-08-22): the file had not parsed for at least 60 wrap
+    commits and nothing noticed, because every consumer reads it line-based (`/catchup`
+    uses sed+grep; Step 5 writes with Edit). An invalid file therefore behaves perfectly
+    right up until something parses it properly — and `prune_registry.py` already
+    corrupted this file once (2026-07-27) for a related reason. The single fault was
+    three unescaped apostrophes inside a single-quoted `next:` scalar, which one wrap
+    typed and every later wrap inherited.
+
+    ⚠️ DO NOT re-implement this with a regex. The S331 session first "detected" the
+    problem with a single-line pattern flagging any `next: '...` that did not close on
+    the same line; that is exactly what a legal MULTI-LINE single-quoted scalar looks
+    like, so it produced two confident false positives that were reported to the owner
+    and acted on. A real parser is available — use it. (§13J: a counting/validity method
+    is itself a check and needs a positive control.)
+
+    Fails CLOSED only when a parser says the FILE is bad. A parser that is missing, too
+    old, or broken yields CANNOT CHECK — never silence, never an accusation against the
+    registry (`cadence-check.js`: silence must mean "nothing wrong", not "reader broke").
+    """
+    if not registry_path.exists():
+        return [f"INFO: registry not found at {registry_path} (skipping parse check)"]
+
+    try:
+        proc = subprocess.run(
+            ["ruby", "-e", _RUBY_PROBE, str(registry_path)],
+            capture_output=True, text=True, timeout=30,
+        )
+    except Exception as exc:  # noqa: BLE001 — any failure to RUN ruby is CANNOT CHECK
+        ruby_note = f"ruby unusable ({_one_line(exc)})"
+    else:
+        if proc.returncode == 0 and "PARSE_OK" in proc.stdout:
+            return []
+        stderr = proc.stderr or ""
+        if any(marker in stderr for marker in _PARSER_FAULT_MARKERS):
+            return _fail(_one_line(stderr), syntax="Psych::SyntaxError" in stderr)
+        # Non-zero, but nothing says the FILE is at fault — e.g. the psych-version
+        # ArgumentError above. Do not accuse the registry.
+        ruby_note = f"ruby exited {proc.returncode} without a Psych error ({_one_line(stderr)})"
+
+    try:
+        import yaml  # noqa: PLC0415 — optional fallback, absent on this machine
+    except Exception as exc:  # noqa: BLE001 — a broken/shadowed yaml module is not ImportError
+        return [f"INFO: CANNOT CHECK registry YAML validity — {ruby_note}; "
+                f"PyYAML unusable ({_one_line(exc)}). Not a pass."]
+
+    try:
+        yaml.safe_load(registry_path.read_text())
+    except yaml.YAMLError as exc:
+        return _fail(_one_line(exc), syntax=True)
+    except Exception as exc:  # noqa: BLE001 — e.g. UnicodeDecodeError on a non-UTF8 file
+        return [f"INFO: CANNOT CHECK registry YAML validity — {ruby_note}; "
+                f"PyYAML raised {type(exc).__name__} ({_one_line(exc)}). Not a pass."]
+    return []
 
 
 def find_first_label(registry_path: Path, project_basename: str) -> str | None:
@@ -106,10 +215,9 @@ def check_label(registry_path: Path, project_basename: str) -> list[str]:
     if len(label) > LABEL_CAP_CHARS:
         issues.append(
             f"FAIL: session-registry label is {len(label)} chars (cap: {LABEL_CAP_CHARS}). "
-            f"Compress to a 3-12 word summary + '→ learnings/path.md' pointer when a learnings "
-            f"file exists. Full session narrative belongs in learnings/, not the label — "
-            f"label is read for grep-fodder, not as prose. Verbose `next` field is fine; "
-            f"that one /catchup reads verbatim."
+            f"Routing signal, NOT a trim order: keep the label a 3-12 word summary + '→ learnings/path.md' "
+            f"pointer and move the narrative DOWN to learnings/ — don't compress in circles. "
+            f"Verbose `next` field is fine; that one /catchup reads verbatim."
         )
     if "learnings/" not in label:
         issues.append(
@@ -142,16 +250,18 @@ def check_memory(memory_path: Path) -> list[str]:
     if len(non_blank) > MEMORY_CAP_LINES:
         issues.append(
             f"FAIL: MEMORY.md Current State block is {len(non_blank)} non-blank lines "
-            f"(cap: {MEMORY_CAP_LINES}). Replace narrative paragraph with: 1 Phase line + 1 Next "
-            f"line + last-3 session-delta lines + Memory Files index."
+            f"(cap: {MEMORY_CAP_LINES}). "
+            f"Replace narrative paragraph with: 1 Phase line + 1 Next line + last-3 "
+            f"session-delta lines + Memory Files index; route the detail DOWN to learnings/."
         )
     if len(block_text) > MEMORY_CAP_CHARS:
         issues.append(
             f"FAIL: MEMORY.md Current State block is {len(block_text)} chars "
-            f"(cap: {MEMORY_CAP_CHARS}). Even one physical line can violate the budget if it's a "
-            f"multi-paragraph essay collapsed; compress to bullet form. Full narrative belongs "
-            f"in learnings/{{date}}-session{{N}}-*.md (auto-loaded via /catchup default mode). "
-            f"MEMORY.md auto-loads as `claudeMd` every session — bytes-tax compounds."
+            f"(cap: {MEMORY_CAP_CHARS}). "
+            f"Routing signal, NOT a trim order: move the overflow DOWN to "
+            f"learnings/{{date}}-session{{N}}-*.md (uncapped, auto-loaded via /catchup default "
+            f"mode) and keep Current State as bullets + pointers — don't compress in circles. "
+            f"MEMORY.md auto-loads as `claudeMd` every session, so the cap guards always-loaded context."
         )
     return issues
 
@@ -252,25 +362,45 @@ def main() -> int:
                    help="Exit 1 on any FAIL (default: WARN, exit 0 — incremental adoption).")
     p.add_argument("--registry", type=Path,
                    default=Path.home() / ".claude" / "session-registry.yaml")
+    p.add_argument("--project", type=str, default=None,
+                   help="Registry project key override (default: derive from cwd; "
+                        "'global' for home / OS-meta sessions run from ~ or ~/.claude).")
     p.add_argument("--memory", type=Path, default=None,
-                   help="Path to project's MEMORY.md (default: derive from cwd slug).")
+                   help="Path to project's MEMORY.md (default: derive from cwd slug, "
+                        "or the HOME-dir slug for home / OS-meta sessions).")
     p.add_argument("--implementation", type=Path, default=None,
                    help="Path to active implementation.md (skip if absent).")
     args = p.parse_args()
 
     cwd = Path.cwd().resolve()
-    project_basename = cwd.name
-    project_slug = str(cwd).replace("/", "-")
+    home = Path.home().resolve()
+    claude_dir = home / ".claude"
+
+    # The home / OS-meta "project" is keyed `global` in the registry and its auto-memory
+    # lives under the HOME-dir slug — NOT the cwd slug. A home session may run from ~ or
+    # from ~/.claude (or a subdir), so cwd.name would otherwise derive the wrong registry
+    # key (.claude / <user>, never matching `global`) and, from ~/.claude, the wrong memory
+    # slug (…-.claude instead of the HOME slug). Mirror the skill's Step 5 `global`
+    # convention, anchored on ~/.claude where OS-meta work definitively happens.
+    is_global = cwd == home or cwd == claude_dir or claude_dir in cwd.parents
+
+    if args.project is not None:
+        project_basename = args.project
+    elif is_global:
+        project_basename = "global"
+    else:
+        project_basename = cwd.name
 
     if args.memory is None:
         # Slug starts with leading dash because absolute path starts with '/';
         # harness convention preserves the leading dash.
+        slug = str(home if is_global else cwd).replace("/", "-")
         args.memory = (
-            Path.home() / ".claude" / "projects" / project_slug
-            / "memory" / "MEMORY.md"
+            claude_dir / "projects" / slug / "memory" / "MEMORY.md"
         )
 
     issues: list[str] = []
+    issues += check_registry_parses(args.registry)
     issues += check_label(args.registry, project_basename)
     issues += check_memory(args.memory)
     if args.implementation is not None:
@@ -296,7 +426,7 @@ def main() -> int:
         )
         return 0
 
-    targets = ["registry-label", "memory"]
+    targets = ["registry-yaml", "registry-label", "memory"]
     if args.implementation is not None:
         targets.append("implementation.md")
     print(f"OK: wrap-artifact compression invariants hold ({', '.join(targets)}).")

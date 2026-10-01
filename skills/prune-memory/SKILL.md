@@ -17,8 +17,8 @@ Deliberate compression pass. Archive-not-delete, mirroring the established prece
 Read in one parallel batch:
 
 1. **MEMORY.md** — the project-local one: `~/.claude/projects/*/memory/MEMORY.md`. Full file.
-2. **CLAUDE.md Mistake Patterns table** — `~/.claude/CLAUDE.md`, just the section.
-3. **CLAUDE.md Principles** — same file, just the section.
+2. **Mistake ledger** — `~/.claude/evals/mistake-ledger.md` (relocated from CLAUDE.md 2026-08-06). Full file.
+3. **Principles index** — `~/.claude/principles/INDEX.md` (relocated 2026-08-06). Full file.
 4. **Current sizes** — `wc -l` and `wc -c` on both files for before/after baseline.
 
 ## Step 2: Identify Candidates
@@ -29,12 +29,12 @@ Candidate criteria (conservative — when in doubt, keep):
 - Sessions older than the two most-recent, IF the `Current State` section already names the currently-active phase/task (i.e., the older session-delta isn't load-bearing for next-session continuity)
 - Historical sections (e.g., "AI-Native Blueprint review X", "RFC v1→v2 pass Y") that have full narratives already in `learnings/` files
 
-**CLAUDE.md Mistake rows**:
+**Mistake rows** (`evals/mistake-ledger.md` since 2026-08-06):
 - Rows with `Times: 1x` AND `Last` date > 30 days ago (recalibrated from 90d on 2026-05-31 — velocity-adjusted; see governance.md § Table-management policy. Eviction *age* only; prune *cadence* stays 90d.)
 - Rows whose content is fully subsumed by a Principle (e.g., row says "X" and Principle P{N} says the same with more generality)
 
-**CLAUDE.md Principles**:
-- Principles NOT referenced in any `learnings/*.md` in the last 60 days (check: `grep -r "P{N}" ~/.claude/projects/*/memory/learnings/` and `git log --grep="P{N}" --since="60 days ago" --oneline`)
+**Principles** (`principles/INDEX.md` since 2026-08-06):
+- Principles NOT referenced in any `learnings/*.md` in the last 60 days (check: `grep -r "P{N}" ~/.claude/learnings/ ~/.claude/projects/*/memory/learnings/` and `git log --grep="P{N}" --since="60 days ago" --oneline`)
 - Principles that are domain-specific leaked into the global file (should be on project-level CLAUDE.md instead)
 
 **When in doubt, keep.** This skill errs on preservation — the whole point of move-not-delete is that "maybe-stale" entries survive in the archive.
@@ -46,9 +46,9 @@ Show user the candidates as a table:
 ```
 | # | File | Entry (1-line summary) | Why candidate | → Archive destination |
 |---|------|------------------------|---------------|----------------------|
-| 1 | MEMORY.md | Session N (YYYY-MM-DD) entry | Not in Current State's 2 most-recent window | MEMORY-archive.md |
-| 2 | CLAUDE.md Mistake | "Deployed fix without verifying live endpoint" (1x, 2026-03-06) | 1x AND >30 days old | MEMORY-archive.md (new section for mistakes) or archived-principles.md |
-| 3 | CLAUDE.md P15 | "Automated tests primary, manual supplementary" | Not grep-referenced in learnings or commits in 60 days | archived-principles.md |
+| 1 | MEMORY.md | Session 21 (2026-04-20) entry | Not in Current State's 2 most-recent window | MEMORY-archive.md |
+| 2 | mistake-ledger.md | "Deployed fix without verifying live endpoint" (1x, 2026-03-06) | 1x AND >30 days old | MEMORY-archive.md (new section for mistakes) or archived-principles.md |
+| 3 | principles/INDEX.md P15 | "Automated tests primary, manual supplementary" | Not grep-referenced in learnings or commits in 60 days | archived-principles.md |
 ```
 
 Wait for user confirmation. Do NOT auto-execute.
@@ -62,7 +62,7 @@ For each approved candidate:
 1. Append to destination archive file with a header stamp:
    ```
    ### Archived 2026-04-23 (pruned from MEMORY.md)
-   - **Session N (YYYY-MM-DD)**: {content verbatim from source}
+   - **Session 21 (2026-04-20)**: {content verbatim from source}
    ```
 2. Remove entry from source file (precise Edit — single occurrence).
 3. If the destination file doesn't exist yet, create it with a brief header explaining its purpose (mirror the pattern of existing archive files).
@@ -99,13 +99,13 @@ Archived:   3 Session-deltas to MEMORY-archive.md
 - **Do NOT run during `/wrap`.** Wrap's time pressure would force hasty decisions.
 - **Do NOT prune entries referenced by recent work.** Grep `learnings/` + `git log --grep=` for the principle/mistake identifier before flagging. If it's been touched in the last 30 days, it's load-bearing.
 - **Do NOT compress-by-rewriting** entries you plan to archive. Archive them verbatim — the archive's whole value is that it preserves the original context. Rewriting on archive = silent data loss.
-- **Do NOT remove `(last prune)` timestamp** from CLAUDE.md header — update it instead.
+- **Do NOT remove the `Last full first-principles prune:` comment** from the CLAUDE.md header — update it instead.
 
 ## When to Invoke
 
 - `/catchup` State-health line shows MEMORY.md > 20 KB or > 200 lines
 - `/catchup` State-health line shows CLAUDE.md > 50 KB or > 400 lines
-- Quarterly scheduled review (check `(last prune: YYYY-MM-DD)` comment in CLAUDE.md header — if > 90 days old, run)
+- Quarterly scheduled review (check the `Last full first-principles prune:` comment at the top of CLAUDE.md — if > 90 days old, run)
 - A `memory-size-gate` hook stderr warning surfaced during a session and you want to address it deliberately
 
 ## Step 8: Public-stack drift check (P57 trigger — runs at the END, after Step 7)

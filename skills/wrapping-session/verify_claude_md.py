@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify global CLAUDE.md compression invariants (wrap-bloat audit follow-up).
+r"""Verify global CLAUDE.md compression invariants (wrap-bloat audit follow-up).
 
 Background: by the time the wrap-bloat audit landed, ~/.claude/CLAUDE.md
 had grown to ~58KB / ~258 lines despite an earlier compression pilot that
@@ -25,13 +25,38 @@ green output).
 Strict mode (--strict): exit 1 on any FAIL.
 
 Checks:
-  1. File size ≤ 50KB (current cap; tighten after compression deltas land).
+  1. File size may not GROW: bytes ≤ SIZE_RATCHET_BYTES (seeded at the size on
+     the day enforcement was switched on; lowered whenever the file shrinks;
+     never raised). Being above the softer SIZE_CAP_BYTES target only WARNs.
+     A static cap is a ceiling and licenses growth up to it; the invariant is
+     that always-loaded tokens go DOWN, which is a ratchet.
   2. Principles count ≤ 70 (current ~60; budget 10 more before forced
      externalization).
-  3. Mistake-table rows ≤ 250 chars OR contain a `→ archive` pointer.
-     The "→" path admits longer rows when the T3 has been externalized
-     to learnings/. The cap targets 1x rows with inline paragraph-T3,
-     which is the bloat pattern.
+  3. Mistake-table rows ≤ 250 chars — UNCONDITIONALLY. An archive pointer
+     no longer exempts a row from the cap; it only changes the failure
+     message. An "≤ cap OR has a pointer" rule is unreachable for exactly
+     the rows that need it, because every oversized row acquires a pointer.
+     Compress per governance.md's mistake-row template: T1 trigger + T2 fix
+     stay inline, the T3 narrative goes to the archive (append it there BEFORE
+     trimming the row — archives drift stale behind the rows that point at them).
+     Pre-existing oversized rows are tolerated up to MISTAKE_ROW_MAX_VIOLATIONS
+     (a ratchet, seeded at the COUNT on the day enforcement was switched on,
+     lowered as rows are compressed, never raised).
+
+     Precisely what the ratchet enforces: **the number of oversized rows may not
+     increase.** It is a count, not an identity set — it does not fingerprint
+     WHICH rows are grandfathered, so retiring one oversized row and adding a
+     different oversized row in the same wrap passes. Do not read this as "no new
+     oversized rows"; it is "no net-new oversized rows". Stating the stronger
+     claim would be a guarantee the code does not make (P72).
+
+     Seeding at today's count is what makes --strict reachable on day one instead
+     of "after the backlog is cleared" — the condition under which a gate is never
+     switched on at all.
+  3b. Mistake-table rows must have exactly 4 columns. A literal `|` inside a
+     cell must be escaped `\|` — GFM requires it even inside code spans, and
+     an unescaped pipe silently starts a new column, hiding both the row's
+     true length and its archive pointer from check 3.
   4. Paragraph-form principles (>600 chars in their entry) MUST contain a
      `→ Full case detail` pointer (the canonical cleavage signature from
      the Phase-1 pilot). Forces the standing convention from day-1 of
@@ -58,7 +83,13 @@ import sys
 from pathlib import Path
 
 # Caps (tunable; tighten as compression lands).
-SIZE_CAP_BYTES = 50_000
+SIZE_CAP_BYTES = 50_000  # the target; being above it WARNs, it does not block
+# Ratchet: the file's size on the day enforcement was switched on. It may only ever
+# DECREASE. Growth past it FAILs, so adding a line now requires removing one — which
+# is the governance rule ("authored within budget from keystroke one") made mechanical.
+# A static cap is a ceiling and permits growth up to it; the stated invariant is that
+# always-loaded tokens go DOWN. Lower this each time the file shrinks.
+SIZE_RATCHET_BYTES = 10_041  # lowered 2026-08-26 (S230: mistake-ledger row count DROPPED from the router — three definitions disagree (37 active / +8 post-ablation / 51 by this file's own counter), so no canonical quantity to state; same call as the checklist rule count. Mutation-proven to still bite at +45 bytes); 2026-08-25 (S67: research-artifact template + the mistake-heading rename-protection relocated to governance.md, paying the skill-mandated fan-out authorization AND netting 92 bytes); 2026-08-25 (S66: P42/P72 firing dates relocated to governance.md, paying the subagent-delegation line); 2026-08-22 (tool-routing + browser-testing rationale relocated to governance.md, paying a sibling session's unpaid expansion); 2026-08-22 from 10_170; 2026-08-21 from 10_174; 2026-08-12 from 10_433; 2026-08-06 from 37_110 by the ablation
 PRINCIPLE_COUNT_CAP = 70
 MISTAKE_ROW_CAP_CHARS = 250
 PARAGRAPH_PRINCIPLE_CAP_CHARS = 600  # entries longer than this MUST externalize T3
@@ -76,19 +107,76 @@ ARCHIVE_POINTER_PATTERNS = (
     "Sub-incidents:",
 )
 EXTERNALIZED_POINTER_PATTERN = "→ Full case detail"  # canonical Phase-1 signature
+MISTAKE_TABLE_COLUMNS = 4  # | Pattern | Times | Rule | Last |
+# Ratchet: rows already over the cap when enforcement was switched on. This number
+# may only ever DECREASE — lower it each time a row is compressed. Adding a new
+# oversized row pushes the count past the ratchet and fails the wrap. Seeding it at
+# the current count is what makes --strict reachable today; a gate that can only be
+# switched on after the backlog is cleared never gets switched on.
+MISTAKE_ROW_MAX_VIOLATIONS = 0
+
+# --- Relocation ledgers (ablation 2026-08-06) -----------------------------
+# The Principles and Mistake-Patterns sections were moved OUT of the always-loaded
+# CLAUDE.md into these non-loaded stores. The entry caps existed to protect
+# always-loaded tokens; content that is never loaded needs no cap, so the ledgers
+# are uncapped by design. What still needs protection is CLAUDE.md RE-growth —
+# that is SIZE_RATCHET_BYTES, which is the real gate now.
+#
+# P72 falsifiability: a missing heading no longer SKIPS the check, it REDIRECTS it.
+# Deleting the heading was the old cheapest way to silence the gate; now doing so
+# requires the entries to genuinely exist in the ledger. This check still FAILs on
+# the exact input the old one guarded against (heading gone AND content gone), and
+# PASSes only on a real relocation.
+_CLAUDE_DIR = Path(__file__).resolve().parents[2]
+PRINCIPLES_LEDGER = _CLAUDE_DIR / "principles" / "INDEX.md"
+MISTAKE_LEDGER = _CLAUDE_DIR / "evals" / "mistake-ledger.md"
+PRINCIPLE_LEDGER_MIN = 55   # 60 relocated on 2026-08-06; a ratchet, never raised
+MISTAKE_LEDGER_MIN = 30     # 36 relocated on 2026-08-06
 
 
-def check_size(text: str) -> list[str]:
+def _check_relocated(ledger: Path, entry_re: str, minimum: int,
+                     label: str, heading: str) -> list[str]:
+    """CLAUDE.md carries no entries (heading missing, or present but empty) —
+    verify the content was MOVED to the ledger, not deleted."""
+    if not ledger.exists():
+        return [f"FAIL: {heading} and the relocation ledger {ledger} does not exist. "
+                f"The {label} were deleted, not relocated. Restore the entries or "
+                f"create the ledger."]
+    try:
+        entries = re.findall(entry_re, ledger.read_text(encoding="utf-8"), re.M)
+    except OSError as e:                                    # pragma: no cover
+        return [f"FAIL: cannot read relocation ledger {ledger}: {e}"]
+    if len(entries) < minimum:
+        return [f"FAIL: {heading} and {ledger.name} holds only {len(entries)} {label} "
+                f"(expected >= {minimum}). Content was lost in relocation."]
+    return [f"INFO: {label} relocated to {ledger.name} ({len(entries)} entries) — "
+            f"not loaded into context by design."]
+
+
+def check_size(text: str, ratchet: int | None = None, cap: int | None = None) -> list[str]:
+    """Growth past the ratchet FAILs. Being above the target cap only WARNs."""
+    if ratchet is None:
+        ratchet = SIZE_RATCHET_BYTES
+    if cap is None:
+        cap = SIZE_CAP_BYTES
     n = len(text.encode("utf-8"))
     issues: list[str] = []
-    if n > SIZE_CAP_BYTES:
-        over = n - SIZE_CAP_BYTES
+    how = ("Compression options: route project-specific principles to project "
+           "CLAUDE.md, externalize T3 narratives to ~/.claude/principles/, "
+           "compress mistake-table rows to T1 + archive pointer (append the "
+           "narrative to the archive BEFORE trimming the row).")
+    if n > ratchet:
         issues.append(
-            f"FAIL: CLAUDE.md is {n} bytes ({over:+d} over {SIZE_CAP_BYTES} cap). "
-            f"Compression options: route project-specific principles to project "
-            f"CLAUDE.md, externalize T3 narratives to ~/.claude/principles/, "
-            f"compress mistake-table 1x rows to T1-only with archive pointers."
+            f"FAIL: CLAUDE.md is {n} bytes ({n - ratchet:+d} past the ratchet of "
+            f"{ratchet}). The file may not grow. To add a line, remove one. {how}"
         )
+    elif n > cap:
+        issues.append(
+            f"WARN: CLAUDE.md is {n} bytes ({n - cap:+d} over the {cap} target, but "
+            f"within the {ratchet} ratchet). {how}"
+        )
+    if n < ratchet:
+        issues.append(f"INFO: ratchet can be lowered — set SIZE_RATCHET_BYTES = {n}.")
     return issues
 
 
@@ -96,13 +184,27 @@ def check_principle_count(text: str) -> list[str]:
     """Count numbered principles under the Principles heading."""
     m = re.search(r"^## Principles\b", text, re.M)
     if not m:
-        return ["INFO: '## Principles' heading not found (skipping count check)"]
+        # Fail CLOSED unless the entries provably moved. A silent skip would mean
+        # renaming the heading disables the check forever while --strict still
+        # reports a clean pass; redirecting to the ledger keeps it falsifiable.
+        return _check_relocated(PRINCIPLES_LEDGER, r"^(\d+)\.\s",
+                                PRINCIPLE_LEDGER_MIN, "principles",
+                                "'## Principles' heading is missing")
     section = text[m.end():]
     nxt = re.search(r"^## ", section, re.M)
     body = section[:nxt.start()] if nxt else section
     # Match lines like "1. ..." through "999. ..." at column 0.
     nums = re.findall(r"^(\d+)\.\s", body, re.M)
     count = len(nums)
+    if count == 0:
+        # The 2026-08-06 ablation moved the entries to principles/INDEX.md but LEFT
+        # the heading in place. Without this branch the check reads 0 <= cap and
+        # passes while the ledger is never opened — a gate that is green for the
+        # wrong reason and cannot fail (P72). An empty section is a relocation
+        # claim; verify it like one.
+        return _check_relocated(PRINCIPLES_LEDGER, r"^(\d+)\.\s",
+                                PRINCIPLE_LEDGER_MIN, "principles",
+                                "'## Principles' section is empty")
     issues: list[str] = []
     if count > PRINCIPLE_COUNT_CAP:
         issues.append(
@@ -178,43 +280,135 @@ def check_paragraph_principles(text: str) -> list[str]:
     return issues
 
 
-def check_mistake_rows(text: str) -> list[str]:
-    """Mistake-table rows over char cap must contain an archive pointer."""
+def _split_cells(line: str) -> list[str] | None:
+    """Split a GFM table row on UNESCAPED pipes; return its interior cells.
+
+    A literal '|' inside a cell must be written '\\|'. An unescaped one opens a
+    new column, so a naive line.split("|") reads a truncated first cell — which
+    under-reports the row's length and loses any pointer sitting past the pipe.
+    Returns None when the line is not a table row.
+    """
+    s = line.strip()
+    if not s.startswith("|"):
+        return None
+    cells: list[str] = []
+    buf: list[str] = []
+    i = 0
+    while i < len(s):
+        ch = s[i]
+        if ch == "\\" and i + 1 < len(s) and s[i + 1] == "|":
+            buf.append("|")
+            i += 2
+            continue
+        if ch == "|":
+            cells.append("".join(buf).strip())
+            buf = []
+            i += 1
+            continue
+        buf.append(ch)
+        i += 1
+    cells.append("".join(buf).strip())
+    # A well-formed row opens and closes with '|', producing empty edge cells.
+    if cells and cells[0] == "":
+        cells.pop(0)
+    if cells and cells[-1] == "":
+        cells.pop()
+    return cells
+
+
+def check_mistake_rows(text: str, max_violations: int | None = None) -> list[str]:
+    """Rows must be ≤ cap (pointer grants no exemption) and have 4 columns.
+
+    Oversized rows are tolerated up to `max_violations` (the ratchet) and reported
+    as WARN; exceeding it is a FAIL. Malformed rows always FAIL.
+    """
+    if max_violations is None:
+        max_violations = MISTAKE_ROW_MAX_VIOLATIONS
     m = re.search(r"^## Mistake Patterns\b", text, re.M)
     if not m:
-        return ["INFO: '## Mistake Patterns' heading not found (skipping row check)"]
+        # Fail CLOSED — see check_principle_count. A renamed heading is the single
+        # highest-leverage way to silence this gate; it must not pass --strict.
+        return ["FAIL: '## Mistake Patterns' heading not found — the row cap and "
+                "column checks cannot run. Restore the heading verbatim."]
     section = text[m.end():]
     nxt = re.search(r"^## ", section, re.M)
     body = section[:nxt.start()] if nxt else section
+    heading_line = text[:m.start()].count("\n") + 1
     issues: list[str] = []
-    violators: list[tuple[int, int]] = []
-    # Match table rows: lines starting with "| " that are NOT header/separator.
-    for ln_idx, line in enumerate(body.splitlines(), start=1):
+    violators: list[tuple[int, str, bool]] = []
+    malformed: list[tuple[int, int, str]] = []
+    data_rows = 0
+    for offset, line in enumerate(body.splitlines(), start=1):
         if not line.startswith("| "):
             continue
         if line.startswith("| Pattern ") or line.startswith("|---") or line.startswith("| ---"):
             continue
-        # Pattern column is the first cell after "| ".
-        parts = line.split("|")
-        if len(parts) < 2:
+        cells = _split_cells(line)
+        if cells is None:
             continue
-        pattern_cell = parts[1].strip()
+        data_rows += 1
+        if len(cells) != MISTAKE_TABLE_COLUMNS:
+            malformed.append((heading_line + offset, len(cells),
+                              line.strip()[2:62].replace("\n", " ")))
+            continue
+        pattern_cell = cells[0]
         n = len(pattern_cell)
         if n > MISTAKE_ROW_CAP_CHARS:
-            has_pointer = any(ptn in pattern_cell for ptn in ARCHIVE_POINTER_PATTERNS)
-            if not has_pointer:
-                # Snippet for diagnostic — first 60 chars.
-                snippet = pattern_cell[:60].replace("\n", " ")
-                violators.append((n, snippet))
+            has_pointer = any(p in pattern_cell for p in ARCHIVE_POINTER_PATTERNS)
+            violators.append((n, pattern_cell[:60].replace("\n", " "), has_pointer))
+    if data_rows == 0:
+        # Same hole as check_principle_count: the 2026-08-06 ablation moved the rows
+        # to evals/mistake-ledger.md but left the heading, so every row-level check
+        # below iterates an empty table and reports clean. MISTAKE_LEDGER was defined
+        # for this and never wired. Exclude both tables' header rows from the count;
+        # this is a deletion floor, not an exact census.
+        # The `-{2,}` alternative excludes GFM separator rows written WITH a space
+        # after the pipe (`| --- | --- |`). The live ledger happens to use `|---|`,
+        # which never matches `^\| ` at all — but that is a formatting accident, and
+        # one auto-formatter pass would silently inflate the count and weaken the
+        # very floor this branch exists to enforce. Mirrors the sibling loop above,
+        # which already excludes both `|---` and `| ---`.
+        return _check_relocated(
+            MISTAKE_LEDGER, r"^\| (?!-{2,}|Pattern \| Times|Row \| Enforcing)",
+            MISTAKE_LEDGER_MIN, "mistake rows",
+            "'## Mistake Patterns' table is empty")
+    if malformed:
+        sample = "; ".join(f"CLAUDE.md:{ln} ({c} cols): {s!r}..." for ln, c, s in malformed[:3])
+        issues.append(
+            f"FAIL: {len(malformed)} mistake-table row(s) without exactly "
+            f"{MISTAKE_TABLE_COLUMNS} columns — an unescaped '|' inside a cell "
+            f"(a pipe in a URL, regex, or shell example counts). Escape it as '\\|' "
+            f"(GFM requires this even inside `code spans`); an unescaped pipe hides "
+            f"the row's real length from the cap check. Offenders: {sample}"
+        )
     if violators:
         violators.sort(reverse=True)
-        sample = "; ".join(f"{n}c: {s!r}..." for n, s in violators[:5])
-        more = f" (+{len(violators) - 5} more)" if len(violators) > 5 else ""
-        issues.append(
-            f"FAIL: {len(violators)} mistake-table rows over {MISTAKE_ROW_CAP_CHARS} chars "
-            f"without archive pointer. Compress to T1+T2 inline + '→ "
-            f"learnings/YYYY-MM-DD-{{slug}}-archive.md' pointer (Phase-2 convention). "
+        sample = "; ".join(f"{n}c: {s!r}..." for n, s, _ in violators[:3])
+        more = f" (+{len(violators) - 3} more)" if len(violators) > 3 else ""
+        n_ptr = sum(1 for _, _, p in violators if p)
+        detail = (
+            f"{len(violators)} mistake-table rows over {MISTAKE_ROW_CAP_CHARS} chars "
+            f"({n_ptr} already carry an archive pointer — a pointer does NOT exempt a row "
+            f"from the cap). Compress per governance.md's row template: T1 trigger + "
+            f"T2 fix inline, T3 narrative to '→ learnings/YYYY-MM-DD-{{slug}}-archive.md' "
+            f"(append it to the archive BEFORE trimming the row — archives drift stale). "
             f"Top offenders: {sample}{more}"
+        )
+        if len(violators) > max_violations:
+            issues.append(
+                f"FAIL: {detail} This exceeds the ratchet of {max_violations} — compress a "
+                f"row, or you are adding sediment faster than you drain it."
+            )
+        else:
+            issues.append(f"WARN: {detail}")
+            if len(violators) < max_violations:
+                issues.append(
+                    f"INFO: ratchet can be lowered — set MISTAKE_ROW_MAX_VIOLATIONS "
+                    f"= {len(violators)} (currently {max_violations})."
+                )
+    elif max_violations > 0:
+        issues.append(
+            f"INFO: no oversized rows — set MISTAKE_ROW_MAX_VIOLATIONS = 0 to lock it in."
         )
     return issues
 
@@ -232,7 +426,10 @@ def main() -> int:
               file=sys.stderr)
         return 0
 
-    text = args.claude_md.read_text()
+    # Explicit encoding: the byte ratchet counts UTF-8 bytes, so a locale-dependent
+    # decode here would silently miscount the multi-byte glyphs (— → ≠ ∩) this file
+    # is full of.
+    text = args.claude_md.read_text(encoding="utf-8")
 
     issues: list[str] = []
     issues += check_size(text)

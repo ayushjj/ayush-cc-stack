@@ -22,7 +22,7 @@ The public stack repo is a sanitized, quarterly snapshot of this private `~/.cla
 ## Inputs
 
 - `~/.claude/.publish-stack-target` (gitignored): two lines — the absolute path to the local public-repo working copy, and the GitHub handle. Missing → abort with setup guidance.
-- `~/.claude/.skill-audit-patterns` (gitignored): denylist tokens (D1–D5, D2_PUB) shared with `/skill-audit`. The leak tokens live here so this skill's scripts stay token-free and pass `/skill-audit` (P68).
+- `~/.claude/.skill-audit-patterns` (private repo only; never in the manifest): denylist tokens (D1–D5, D2_PUB) shared with `/skill-audit`. The leak tokens live here so this skill's scripts stay token-free and pass `/skill-audit` (P68).
 - `publish_manifest.txt` (in this dir): the curated allowlist of what to publish. Edit this, not the helper, to add/remove items.
 
 ## Steps
@@ -69,4 +69,4 @@ The agent stops at the handoff. It never runs the final sweep, commits, or pushe
 - **Don't trust a clean gate as permission to push.** It's a safety-net; the human sweep is the gate.
 
 ## Recursive note (P68)
-This skill ships in its own snapshot (manifest `skill:publish-stack`). It must stay universal: all leak tokens live in the gitignored `.skill-audit-patterns`; the target path lives in the gitignored `.publish-stack-target`. Verify by running `/skill-audit` — `skills/publish-stack/` must PASS D1–D5.
+This skill ships in its own snapshot (manifest `skill:publish-stack`). It must stay universal: all leak tokens live in `.skill-audit-patterns` (kept out of the manifest); the target path lives in the gitignored `.publish-stack-target`. Verify by running `/skill-audit` — `skills/publish-stack/` must PASS D1–D5.

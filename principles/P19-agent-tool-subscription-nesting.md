@@ -1,0 +1,9 @@
+# P19 (private P70) — Agent-tool subagents: subscription billing + nesting (≤5 deep)
+
+> Externalized 2026-07-04 (S44 Fable-5 audit). CLAUDE.md retains the inline T1 trigger + T2 rule; this file preserves the full pre-audit principle text verbatim (including the superseded-claim history).
+
+**Applies to**: any autonomous/headless work design — choosing between `claude -p` (API-billed) and Agent-tool subagents (subscription-billed), and any fan-out skill dispatched inside a subagent.
+
+## Full text (verbatim from CLAUDE.md as of 2026-07-04)
+
+> **Agent-tool subagents for subscription-only autonomous work; subagents can now nest (up to 5 deep).** Two facts: (a) `claude -p` headless is per-token API-billed; Agent-tool subagents bill against the parent session's subscription — for subscription-only autonomy use the Agent tool with self-contained briefs, NOT headless. (UNCHANGED.) (b) **SUPERSEDED 2026-06-16** — old claim was "subagents are LEAF NODES, can't spawn sub-Agents, so fan-out skills silently degrade to single-pass self-review." As of v2.1.172 (2026-06-10) sub-agents CAN spawn their own sub-agents up to 5 levels deep — **verified empirically 2026-06-16** (a test subagent spawned a working sub-agent via the Agent tool). So fan-out skills (`/review`, `/code-review`, parallel-research) dispatched inside a subagent now actually fan out instead of degrading. Design-time check: still ask BOTH "subscription or API quota?" AND "does the subagent need to fan out?" — if yes, you can now let it nest. The **named-principle checklist with detection signatures** (not "review carefully") remains good brief hygiene as a graceful fallback (older versions / nesting disabled / depth-cap hit), since a named checklist still beats plausible-but-shallow self-review. → `~/.claude/projects/-Users-<you>[redacted]/memory/learnings/2026-05-28-S48-tests-track-autonomous-batch-orchestration-12-PRs.md`

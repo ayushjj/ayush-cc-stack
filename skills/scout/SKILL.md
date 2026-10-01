@@ -62,12 +62,12 @@ Report to user: "Extracted N actionable tips from M items (K skipped)."
 
 Read these files to understand your current Claude Code configuration. **Read all in parallel** where possible:
 
-1. `~/.claude/CLAUDE.md` — current rules, mistake patterns, principles
+1. `~/.claude/CLAUDE.md` — current rules and gates (mistake rows: `~/.claude/evals/mistake-ledger.md`; principles: `~/.claude/principles/INDEX.md`)
 2. `~/.claude/settings.json` — hooks, permissions, model settings
 3. `~/.claude/settings.local.json` — local overrides (if exists; skip if missing)
 4. Glob `~/.claude/skills/*/SKILL.md` — list all skills (read only names + descriptions from frontmatter, not full content)
-5. `~/.claude/projects/C--Users-User/memory/MEMORY.md` — current memory index
-6. `~/desktop/knowledge-graph/graph-index.yaml` — existing insights (for dedup against knowledge graph)
+5. `~/.claude/projects/-Users-<you>/memory/MEMORY.md` — current memory index
+6. `~/dev/[redacted]/graph-index.yaml` — existing insights (for dedup against knowledge graph)
 7. Glob `~/.claude/projects/*/memory/*.md` — scan for user workflow details
    (voice input, editor prefs, parallel sessions, tool choices, stated philosophy).
 
@@ -205,7 +205,7 @@ If no tips qualify, write: "(none — all tips are actionable workflow items, no
 
 ## Step 5.5: Self-Review (Mandatory)
 
-Before presenting the report, review each recommendation across 4 dimensions:
+Before presenting the report, review each recommendation across all 7 dimensions below (R1–R7):
 
 ### R1: Evidence Quality
 For each "Already Implemented" or "Partially Implemented" classification:
@@ -307,6 +307,11 @@ These are accumulated failure points from real `/scout` sessions.
 2. **X/Twitter fetch failures:** Jina Reader cannot reliably parse X Articles (JS-rendered). If URL is `x.com/*` or `twitter.com/*` and fetch returns < 300 words, ask user to paste the text.
 3. **Superficial "Already Implemented" matches:** Keyword-matching on CLAUDE.md can falsely classify tips as already covered. Always run all 3 comparison layers (keyword, semantic, functional) — a tip about "hooks for safety" is NOT the same as having a PostToolUse reminder hook.
 4. **Context limits on large articles:** Very long source articles can consume significant context before the comparison phase even begins. For articles > 3000 words, extract tips first, then read setup files — don't load both simultaneously.
+6. **X replies via API are newest-first, not by likes.** The `harvest.py` OAuth token can call
+   `/2/tweets/search/recent?query=conversation_id:<id>` but a "top replies" pull means fetching the
+   whole thread and sorting (~US$2 per 500 replies; 402 when credits run out). The web "Relevant"
+   sort is free: ask for 4-6 zoomed-out screenshots of the top of the thread instead. Also: never
+   read replies from `data/index.jsonl` — the harvester stores the bookmarked post only. (2026-09-08)
 5. **Missing user profile context:** Tips about voice input, parallel sessions, or
    editor preferences live in memory files, not settings.json. R6 catches these —
    but only if Step 3 reads memory files. If memory files don't exist, R6 has no data.

@@ -298,6 +298,7 @@ rate_color() { if [ "$use_color" -eq 1 ]; then printf '\033[38;5;158m'; fi; }  #
 if [ "$HAS_JQ" -eq 1 ]; then
   rate_5h_pct=$(echo "$input" | jq -r '.rate_limits // {} | .["5h"] // {} | .used_percentage // empty' 2>/dev/null)
   rate_7d_pct=$(echo "$input" | jq -r '.rate_limits // {} | .["7d"] // {} | .used_percentage // empty' 2>/dev/null)
+  effort_level=$(echo "$input" | jq -r '.effort.level // empty' 2>/dev/null)
   rate_5h_reset=$(echo "$input" | jq -r '.rate_limits // {} | .["5h"] // {} | .resets_at // empty' 2>/dev/null)
 
   # Color based on 5h usage (most likely to hit)
@@ -330,6 +331,11 @@ if [ -n "$context_pct" ]; then
   printf '🧠 %sContext: %s remaining [%s]%s' "$(context_color)" "$context_pct" "$context_bar" "$(rst)"
 else
   printf '🧠 %sContext: Initializing...%s' "$(context_color)" "$(rst)"
+fi
+
+# Effort level (added 2026-09-08: a silent medium fallback stayed invisible for weeks — P42)
+if [ -n "$effort_level" ]; then
+  printf '  🎚 %seffort:%s%s' "$(model_color)" "$effort_level" "$(rst)"
 fi
 
 # Rate limit usage (if available)

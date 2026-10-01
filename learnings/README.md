@@ -42,4 +42,4 @@ Adopters maintaining their own version should follow the same pattern: capture l
 - `../CLAUDE.md` § Principles — the abstracted patterns
 - `../CLAUDE.md` § Mistake Patterns — the firing ledger
 - `../governance.md` § Skill-coupling contracts — the maintainer-side artifact spawned by the governance-restructure learning
-- `../principles/P01` through `P10` — the 10 externalized worked-example files
+- `../principles/P01` through `P22` — the 22 externalized worked-example files (index: `../principles/INDEX.md`)

@@ -65,86 +65,36 @@ Read the prompt (or draft it if new), then check every box:
 <step number="1" required="true" blocking="true">
 ## Phase 2: Measure and Tune
 
-Skip this phase if you're writing a brand-new prompt with no existing baseline to compare against. Come back when you have real output to evaluate.
+Skip this phase when writing a brand-new prompt — there is no baseline to compare against. Come
+back when real output exists to evaluate.
 
-### Step 2a: Create Test Cases (Minimum 10)
+**Slimmed S69 2026-08-27.** This phase carried five `<step>`/`<validation_gate>` blocks of
+process scaffolding and had run **zero** times since it was merged in from the former
+tuning-llm-prompts skill; no `specs/llm-tune-*` exists on disk. The scaffolding was the cost and
+none of it was ever paid for. What survives is the part that does the work: measure, try several
+things, choose on data, lock it in with tests.
 
-See `scripts/measure-accuracy.ts` for the TestCase interface.
+1. **Test cases — at least 10.** Interface in `scripts/measure-accuracy.ts`. Cover 3+ clear
+   positives, 3+ clear negatives, 3+ boundary/edge, every case that has failed in production,
+   and mixed-language cases if the prompt sees them. Fewer than 10, or missing one of those
+   categories, and the measurement below cannot distinguish a real gain from noise.
 
-**Required categories:**
-- Clear positive cases (3+)
-- Clear negative cases (3+)
-- Boundary/edge cases (3+)
-- Cases that previously failed in production
-- Mixed language cases (if applicable)
+2. **Baseline.** Run all cases against the CURRENT prompt before changing anything. Record
+   accuracy (N/M), each failed case with actual vs expected, and the failure *patterns* — the
+   pattern is what tells you which of the four moves below to reach for.
 
-<validation_gate name="test-cases-created" blocking="true">
-- [ ] Minimum 10 test cases created
-- [ ] At least 3 positive, 3 negative, 3 edge
-- [ ] Failed cases from production included
+3. **At least 3 approaches**, generated with Phase 1's structural rules. The high-impact ones:
+   reorder only (constraints up, same words) · reduce to ≤7 rules · replace 3 abstract rules
+   with 1 concrete example · add a boundary example where the limit is. Note each one's
+   accuracy, strengths and weaknesses.
 
-Do NOT proceed with fewer than 10 diverse test cases.
-</validation_gate>
-</step>
+4. **Choose on the numbers, not on feel.** Compare approaches on accuracy, robustness, false
+   positives and false negatives — the last two separately, because a prompt that trades one for
+   the other can hold accuracy flat while getting worse for its actual job. State the trade-off
+   you accepted.
 
-<step number="2" required="true" depends_on="1" blocking="true">
-### Step 2b: Measure Baseline
-
-Run all test cases against the CURRENT prompt. Document:
-
-```markdown
-## Baseline
-- Accuracy: X% (N/M correct)
-- Failed cases: [list with actual vs expected]
-- Failure patterns: [what's going wrong]
-```
-
-<validation_gate name="baseline-measured" blocking="true">
-- [ ] Current prompt tested against all cases
-- [ ] Accuracy percentage calculated
-- [ ] Failed cases documented with actual output
-- [ ] Failure patterns identified
-</validation_gate>
-</step>
-
-<step number="3" required="true" depends_on="2">
-### Step 2c: Try Multiple Approaches (Minimum 3)
-
-Use the structural rules from Phase 1 to generate approaches. Common high-impact changes:
-
-1. **Reorder only** — move constraints up, keep same words
-2. **Reduce rules** — combine or cut to stay under 7
-3. **Replace rules with examples** — swap 3 abstract rules for 1 concrete example
-4. **Add boundary example** — show the LLM where the limit is
-
-Document each approach with accuracy, strengths, weaknesses.
-</step>
-
-<step number="4" required="true" depends_on="3" blocking="true">
-### Step 2d: Choose Based on Data
-
-Create decision matrix:
-
-| Approach | Accuracy | Robustness | False Positives | False Negatives |
-|----------|----------|------------|-----------------|-----------------|
-| A | X% | ... | X% | X% |
-| B | X% | ... | X% | X% |
-| C | X% | ... | X% | X% |
-
-<validation_gate name="decision-made" blocking="true">
-- [ ] All approaches tested and measured
-- [ ] Decision matrix created
-- [ ] Chosen approach has clear rationale
-- [ ] Trade-offs documented
-
-Decision must be data-driven, not gut-feel.
-</validation_gate>
-</step>
-
-<step number="5" required="true" depends_on="4">
-### Step 2e: Add Regression Tests
-
-Every failed case becomes a regression test. Add ALL tricky edge cases to the project's test suite.
+5. **Every failed case becomes a regression test** in the project's suite. This is what stops
+   the next tuning pass from silently re-breaking what this one fixed.
 </step>
 
 </critical_sequence>
@@ -205,8 +155,8 @@ Choose (1-4): _
 - Auto-suggest: when user mentions prompt issues, LLM wrong output, or "restructure prompt"
 
 **Complements:**
-- `/tuning-llm-prompts` is now merged into this skill (Phase 2)
-- `/validate` skill (to verify in production after deploying)
+- The former tuning-llm-prompts skill is merged into this skill (Phase 2)
+- Post-deploy verification: executing-batch-operations → Query-correctness validation (expected behavior → real data → precision/recall)
 
 **Handoff:**
 Creates decision documentation in `specs/llm-tune-{feature}/`.

@@ -22,32 +22,43 @@ Report to user:
 
 ## Step 1: Fetch Sources (Parallel)
 
-Fetch from four independent sources. If one fails, continue with the others.
+Fetch from five independent sources. If one fails, continue with the others.
 
-### Source A: GitHub Releases (primary — highest signal)
+### Source A: CHANGELOG.md (primary — the only complete version list)
 
 ```bash
-gh api repos/anthropics/claude-code/releases --jq '.[] | {tag_name, published_at, name, body}' 2>&1
+curl -s https://raw.githubusercontent.com/anthropics/claude-code/main/CHANGELOG.md
 ```
 
+**Why CHANGELOG.md and not the Releases API:** Anthropic does not cut a GitHub Release for every
+version. On 2026-08-25 the API returned 404 for v2.1.242/243/244 while CHANGELOG.md carried **~60
+items under `## 2.1.243` alone**; the 2026-08-22 run saw only three "Bug fixes" notes and reported
+the window clean. platform.claude.com states the canonical pointer itself: *"For updates to Claude
+Code, see the complete CHANGELOG.md in the `claude-code` repository."* → `scout-reports/2026-08-25-level-up-report.md`
+
+**Parse:** split on `^## (\d+\.\d+\.\d+)$` headers; each section's bullets are that version's items.
+CHANGELOG.md carries no dates, so version-compare against `processed.claude_code_releases` — do NOT
+filter by date.
+
 **Filter:**
-1. Only releases where `published_at` is after `last_run`
-2. Exclude any `tag_name` already in `processed.claude_code_releases`
-3. Cap at **10 most recent** releases. If more than 10 are new, process the 10 most recent and note: "({N-10} older releases not processed — run `/level-up` again to catch up)."
+1. Only versions NOT already in `processed.claude_code_releases`
+2. Cap at **10 most recent** versions. If more than 10 are new, process the 10 most recent and note: "({N-10} older versions not processed — run `/level-up` again to catch up)."
+3. A version whose only item is "Bug fixes and reliability improvements" is real but content-free — record it as processed, report nothing.
 
-**From each release body, extract only feature-relevant items:**
-- New flags, commands, or CLI features
-- Hook system changes
-- Skill/plugin system changes
-- Settings schema changes
-- Permission model changes
-- MCP capabilities
-- Workflow-impacting behavioral changes
+**Fallback:** if the `curl` fails or returns non-markdown, fall back to
+`gh api repos/anthropics/claude-code/releases --jq '.[] | {tag_name, published_at, name, body}'`
+and **state in the report that coverage is degraded** — the API silently omits whole versions.
 
-**Deprioritize** (include but mark as low-signal):
-- Bug fixes for platforms the user doesn't use
-- Rendering/cosmetic fixes
-- Internal refactoring
+**Read EVERY item of every new version — no keyword pre-filter.** Hand the new sections to an
+`Agent` (model: opus) with the owner's setup paths (settings.json, hooks/, skills/, output-styles/)
+and ask it to check each line against that setup. "Fixed" lines matter as much as "Added": a fix
+can make a workaround in a skill or hook removable, and a removable workaround is a quick win.
+(2026-10-01: a keyword grep over Added/Changed/Improved read ~1/3 of ~700 lines and the owner
+correctly called it a skim.)
+
+Classify each relevant item: FIXES-A-PAIN (cite the workaround file:line) · CHANGES-MY-SETUP
+(cite file:line it affects) · NEW-CAPABILITY (before → after for the owner). Mark platform-only
+or cosmetic items as low-signal, but count them as read.
 
 ### Source B: Anthropic Blog (secondary — announcements)
 
@@ -103,9 +114,29 @@ Prompt: "List all blog posts visible on this page with date, title, and full URL
 
 **If WebFetch fails:** Log "Engineering blog fetch failed — continuing with other sources. Note: this source contains postmortems and deep-dives that may be missed." Do NOT block.
 
+### Source E: The owner's X bookmarks (what practitioners are doing)
+
+**Why this source exists:** Anthropic's pages say what shipped; the owner's bookmarks say how
+people are actually using it, and they are pre-filtered by his own interest. Until 2026-10-01
+they fed only `/brief`, never this skill.
+
+```bash
+cd ~/dev/[redacted] && python3 harvest.py && python3 harvest.py --status
+```
+(Pay-per-read, cents per run — this is the owner's routine weekly harvest. If it fails or the
+repo is missing, say so in the report and continue.)
+
+New items = ids in `data/index.jsonl` not in `data/catalog.jsonl`. Hand them to an `Agent`
+(model: opus) that (1) appends catalog lines per the repo README contract and verifies counts,
+(2) scores every new item against the owner's setup and current projects, returning the top 5
+as idea · before → after · file it would change (or "new") · effort · confidence, and never
+recommending something that already exists (name the existing file instead).
+
+Merge Source E ideas into Step 3 alongside the release items; attribute each to its bookmark.
+
 ### Remaining acknowledged gaps (not in scope)
 
-- **`@AnthropicAI` / `@claudeai` X accounts** — research previews land here first (auto-mode classifier Apr 10 was example). No reliable public scrape path.
+- **`@AnthropicAI` / `@claudeai` X accounts directly** — partly covered by Source E when the owner bookmarks their posts; unbookmarked posts are still missed.
 - **Anthropic Discord** — community discussion, no scrape path.
 - **Anthropic SDK release notes** (anthropic-sdk-python, anthropic-sdk-typescript GitHub) — useful only for SDK code authors.
 - **MCP protocol / server repos** — useful only for MCP-server builders.
@@ -120,9 +151,9 @@ Merge results from all successful sources into a single update digest:
 ```markdown
 ## Claude Code Updates Since {last_run}
 
-### New Releases ({count})
-For each release:
-- **{tag_name}** ({published_at}): {release name}
+### New Versions ({count})
+For each CHANGELOG.md version (it carries no dates):
+- **{version}**
   - {feature 1}
   - {feature 2}
   - ...
@@ -204,9 +235,9 @@ Present to the user:
 
 ```
 Level-up complete ({last_run} → today).
-Fetched: {N} releases, {M} news posts, {E} engineering posts, {P} platform entries
-Sources covered: GitHub releases, anthropic.com/news, anthropic.com/engineering, platform.claude.com
-Sources NOT covered (acknowledged gaps): X/Twitter, Discord, SDK repos, MCP repos, plugin repos
+Fetched: {N} releases, {M} news posts, {E} engineering posts, {P} platform entries, {X} new bookmarks
+Sources covered: CHANGELOG.md, anthropic.com/news, anthropic.com/engineering, platform.claude.com, X bookmarks
+Sources NOT covered (acknowledged gaps): unbookmarked X posts, Discord, SDK repos, MCP repos, plugin repos
 Report: ~/.claude/scout-reports/{date}-level-up-report.md
 
   - {X} quick wins ready to implement
@@ -227,8 +258,8 @@ Then offer:
 
 ## Gotchas
 
-1. **GitHub API pagination:** `gh api` returns only the first 30 releases by default. For longer gaps (30+ days), add `--paginate` or `?per_page=100`. Usually not needed for weekly runs.
-2. **Blog fetch fragility:** `anthropic.com/news` may change structure. If WebFetch returns unparseable content, skip Source B and note it. GitHub releases alone provide ~80% of actionable updates.
+1. **Never trust the Releases API for completeness:** it omits entire versions (v2.1.242/243/244 were 404 on 2026-08-25 while 2.1.243 shipped ~60 changes). CHANGELOG.md is the complete list. If you must use the API fallback, say so in the report.
+2. **Blog fetch fragility:** `anthropic.com/news` may change structure. If WebFetch returns unparseable content, skip Source B and note it.
 3. **Scout context budget:** Running the full scout comparison (Step 3) consumes significant context. With 10 releases × ~20 line items each, that's 200 items before comparison starts. The scout Step 2 extraction filters this down to genuinely actionable tips.
 4. **First run is noisy:** With 14 days of history, the first run may surface many items. This is expected — it establishes the baseline. Subsequent weekly runs will be much leaner.
 5. **Don't double-count:** Release notes often mention the same feature across multiple releases (introduced in one, fixed in the next). Dedup by feature, not by release.

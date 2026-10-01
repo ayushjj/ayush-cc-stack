@@ -1,7 +1,6 @@
 ---
 name: premise-check
-description: Challenge whether a feature should be built before planning it. Use before /spec for non-trivial features, or when "should we build this?" is unclear. Triggers on '/premise-check', 'should we build', 'is this worth it', 'validate the premise'.
-user_invocable: true
+description: Establish that a problem is real and worth solving before any plan is written. Use when the request names a thing to build that does not yet exist and no evidence of the problem has been cited — before /creating-specifications, before entering plan mode, and before the confirm-approach bullets. Triggers on '/premise-check', 'should we build', 'is this worth it', 'validate the premise', 'do we need this'.
 effort: high
 ---
 
@@ -12,7 +11,7 @@ This is NOT brainstorming (generating options). This is diagnosis (challenging a
 
 ## When to Use
 
-- Before `/spec` for any non-trivial feature
+- Before `/creating-specifications` for any non-trivial feature
 - When you have an idea but aren't sure it's worth the effort
 - When Rule 0 classifies work as PLAN and the problem isn't crystal clear
 - When someone suggests "we should build X" and the response is enthusiasm rather than evidence
@@ -43,6 +42,7 @@ If the answer is vague ("it would be nice to have..."), push: "Can you name a sp
 ### 4. Existing Code Check
 
 Before proposing anything new, search for partial solutions:
+- "Has someone already built this?" — check for existing tools, libraries, SaaS products, or adjacent codebases that already solve it before building from scratch.
 
 ```bash
 # Search for related functionality already in the codebase
@@ -70,10 +70,10 @@ Reason: [user's explanation]
 Recommendation: [do nothing / revisit when X changes / alternative approach]
 ```
 
-If all premises pass → proceed to `/spec`.
+If all premises pass → proceed to `/creating-specifications`.
 ```
 PREMISE CHECK: PASSED
-Proceed to /spec with validated premises as input to the Problem Statement.
+Proceed to /creating-specifications with validated premises as input to the Problem Statement.
 ```
 
 ## Anti-Sycophancy (enforced during this skill)

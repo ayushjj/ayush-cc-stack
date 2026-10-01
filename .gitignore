@@ -48,3 +48,6 @@ secrets-*
 # checklist for the publish event itself. Contains literal denylist patterns (business
 # identifiers used as grep arguments) that must never be tracked.
 specs/
+
+# Generated eval run output (machine paths, run artifacts) — not source
+skills/*/evals/results/

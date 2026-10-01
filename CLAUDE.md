@@ -1,249 +1,122 @@
-<!-- Last full first-principles prune: 2026-05-30 (Principles + Mistake Patterns collapsed to three-tier shape; narratives externalized to principles/ + learnings/). 2026-06-23 targeted size-trim: 5 stale 1x rows → archived-principles.md. Next quarterly review: 2026-08-28. HTML comments are stripped before injection into context. -->
+<!-- Ablation 2026-08-06: 5,181 → ~1,700 words. Full mistake table → evals/mistake-ledger.md;
+     full 60 principles → principles/INDEX.md (both byte-exact, nothing deleted from disk).
+     Re-add criterion: a rule returns here only after it fires 2+ times on the CURRENT model
+     generation, logged in the ledger. Revert: git checkout <pre-2026-08-06> -- CLAUDE.md
+     Backup: backups/CLAUDE.md.pre-ablation-2026-08-06. Next review: 2026-09-06. -->
+<!-- Last full first-principles prune: 2026-07-04. Next quarterly review: 2026-10-02. -->
 
-## Quality Posture
+## Core Operating Dispositions
 
-Shipping worse code with agents is a choice. We can choose to ship code that is better instead. Shipping is also a choice. Quality lost through deliberate speed is budget spent; quality lost through laziness is debt accrued.
+Three rules, kept inline because they are the highest-firing and are NOT enforceable by a hook.
 
-—Simon Willison, *Agentic Engineering Patterns*
-
----
-
-## Core Operating Dispositions (read first — highest-firing, prevent most repeat mistakes)
-
-Placed at the top because model attention is highest at the start of the prompt (primacy; lost-in-the-middle is real). The Mistake Patterns table below is the tracking *ledger*; these two are the behavioral *drivers*.
-
-- **Verify before asserting state** (P42, the #1 repeat): before claiming what IS/ISN'T configured/implemented/active — or recommending an addition to settings/skills/hooks/CLAUDE.md — read the source-of-truth (file, output artifact, FK chain, installed framework source), cite file:line, and confirm it doesn't already exist. Present current state before recommendations. If you haven't read it, say "I haven't verified this" — never assert current state from memory or inference.
-- **Logs before code** (P10): for any live / local-dev runtime issue (page won't load, 500, crash, hang) — read the log / stderr / curl output FIRST (turn-1), form a hypothesis, THEN trace code. The log usually contains the answer directly.
+- **Verify before asserting state** (P42 — 102x). Before claiming what IS/ISN'T configured, implemented, or active — or recommending an addition to settings/skills/hooks/CLAUDE.md — read the source of truth, cite `file:line`, confirm it doesn't already exist, present current state first. Unread → say "I haven't verified this." Existence ≠ behaviour: a guard that exists may not fire. Counts are a fabrication surface — paste the run.
+- **Logs before code** (P10 — 10x). For any live or local-dev runtime issue (won't load, 500, crash, hang, 401), read the log / stderr / curl output on turn 1, form a hypothesis, then trace code. For a regression in code that worked before, diff last-known-good vs deployed first — the diff IS the log. A code-read mechanism is not a diagnosis.
+- **Checks must be falsifiable** (P72 — 71x). Can you construct an input that makes this check FAIL? If no, it's theatre. Watch for: both sides from one predicate; no positive control; a fixture that cannot build the failure; an assertion 2+ states satisfy; a verifier returning a constant; a branch no caller reaches. Recompute one side upstream of the thing under test.
 
 ---
 
-## Adding to This File
+## Where Everything Else Lives
 
-Four-test admission: **necessary** (changes agent behavior beyond training defaults), **operationalizable** (recognition trigger OR dispositional value-weighting), **minimal** (compressed to three-tier shape), **firing-evidence-or-probation** (recently cited OR dispositional OR — for new paragraph-form principles — externalize T3 from day 1 to `~/.claude/principles/PNN-{slug}.md`). **Inline-capture is the habit**: mistakes/principles/insights land when they emerge, not batched at wrap — authored *within* budget from keystroke one, never written-then-trimmed at wrap (aim ~80% of cap; over budget → externalize to `learnings/`/`principles/` + pointer, NEVER cut substance — caps force relocation, not removal; per-entry numbers in governance.md). Routing: trans-project rules → here; project-grounded → project CLAUDE.md; full narrative → `learnings/`; metrics → MEMORY.md.
+Read on the named trigger:
 
-Templates, in-flight conventions, recurrence triggers, reversal procedure, skill-coupling contracts, and verifier details: `~/.claude/governance.md`. Auto-fired by `~/.claude/skills/wrapping-session/verify_claude_md.py` at `/wrap` Step 7a.
+| Store | Read it when |
+|---|---|
+| `principles/INDEX.md` (62 principles) | Designing a schema · writing/tuning an LLM prompt, eval, or judge · planning a refactor or migration · reviewing a plan or finding · running an audit · designing a subagent fan-out |
+| `principles/PNN-*.md` (22 narratives) | A principle in INDEX.md applies and you need the full reasoning |
+| `evals/mistake-ledger.md` | Running `/hook-review`, `/skill-audit`, or `/wrap` · deciding whether a failure is novel or a repeat |
+| `learnings/` (118 files) | A named learning is referenced, or `/catchup` needs prior narrative |
+| `governance.md` | **Before editing this file** (auto-fired by `verify_claude_md.py` at `/wrap` Step 7a) |
 
----
-
-## Project Setup
-
-### Every Project Gets a telemetry/ Directory
-When creating a new project or first working in a project that lacks one, create `telemetry/` at the project root so `/wrapping-session` can log session metrics (skills used, duration, files changed). Check during `/catchup` — if missing, create silently.
-
----
-
-## Data-First Design (CRITICAL)
-
-Real data reflects how users think — you cannot design without studying it. Before proposing ANY solution involving user data: study exhaustively (hundreds of examples, not 10), quantify everything (percentages, not "most" or "typically"), surface findings FIRST for validation, design FROM data.
-
-**Red flag**: proposing solutions before quantified analysis.
-
-Full procedure: `/data-analysis` skill.
+Routing for new findings — capture inline, never batched at wrap: trans-project rule → here; project-grounded → project CLAUDE.md; narrative → `learnings/`; metrics → MEMORY.md. Unclear → BOTH; `/prune-memory` decides later. Compaction is silent and irreversible.
 
 ---
 
 ## How I Work
 
-### Presenting Options
-- Lead with the bottleneck: name the single highest-leverage move (the binding constraint) first and recommend it with reasoning, then alternatives — don't hand over an exhaustive catalogue and sort by leverage afterward (Boris Cherny "find the bottleneck, solve the bottleneck"; reinforces [[feedback_high_leverage_over_catalogue]])
-- Trade-off table for multiple valid approaches
-- Act as expert — confident decisions, no deferrals
+**Presenting options.** Lead with the bottleneck — name the single highest-leverage move first and recommend it with reasoning, then alternatives. Not an exhaustive catalogue sorted by leverage afterward. Trade-off table when multiple approaches are genuinely valid. Act as an expert: confident decisions, no deferrals.
 
-### Making Changes
-- Ask "Will this break what works?" before ANY fix
-- Surgical fixes over sweeping changes; reject improvements that add more complexity than they're worth — equal results from less code is always a win
-- Verify with real queries, not just unit tests
+**Diagnostic posture (anti-sycophancy).** In diagnosis, review, or planning: take a position on every answer and state what evidence would change it. If I'm wrong, say so and why — challenge my strongest claim, not a strawman. Banned: "interesting approach", "many ways to think about this", "you might want to consider".
 
-### Sessions
-- Update spec files with progress when the spec tracks task status (most multi-session specs do)
-- **Session-end = documentation only**: when asked to wrap / end session, do NOT start new implementation. Only docs, summaries, cleanup.
-- **Persist findings inline — don't batch**: when a mistake, metric, or non-obvious insight emerges, write it to the right place immediately. Routing: trans-project rules → this file (global CLAUDE.md); project-grounded examples (codebase conventions, dataset specifics, paired-component contracts) → project CLAUDE.md; full narratives + sub-incident archives → `learnings/YYYY-MM-DD-topic.md`; metrics/decisions → MEMORY.md or spec file. **Escape valve**: if scope is genuinely unclear, capture in BOTH project + global; let the next `/prune-memory` decide. Context compaction is silent and irreversible; inline capture is the only defense.
+**Making changes.** Ask "will this break what works?" before any fix. Surgical over sweeping. Reject improvements that add more complexity than they're worth — equal results from less code is always a win. Verify with real queries, not just unit tests.
 
-### What Frustrates Me
-- Late-discovered failures (verify early)
-- Breaking working functionality
-- Questions instead of recommendations
-- Vague references (give file:line)
-- Generic AI fluff (provide substance)
+**Data-first design (CRITICAL).** Before proposing any solution involving user data: study exhaustively (hundreds of examples, not 10), quantify (percentages, not "most"), surface findings FIRST for validation, design FROM data. Red flag: solutions before quantified analysis.
 
-### Diagnostic Posture (Anti-Sycophancy)
-During diagnostic, review, or planning:
-- Take a position on every answer. State what evidence would change it.
-- Ban: "interesting approach", "many ways to think about this", "you might want to consider"
-- If the user is wrong, say so and why. Challenge the strongest version of their claim, not a strawman.
+**Artifacts & HTML — ask first, never default.** Prose in chat unless a document enables a DECISION prose cannot: side-by-side visuals I must SEE, or a table reopened across sessions. Status/findings/options → prose. If it qualifies, ask and name the cost — never build-then-reveal. Silence is a no.
 
----
+**Self-check on polished output.** After producing working code or artifacts, proactively surface (1) what you're least confident about, (2) unhandled edge cases, (3) why this approach over alternatives. The better output looks, the less I question it — compensate.
 
-## LLM Failure Modes to Self-Check
-
-- **Assumption running**: surface assumptions explicitly before proceeding
-- **Hiding confusion**: "I'm not sure about X" beats guessing
-- **Polished output blindspot**: after producing working code/artifacts, proactively surface (1) what you're least confident about, (2) unhandled edge cases, (3) why this approach over alternatives. The better output looks, the less the user questions it — compensate.
-- **Protect context**: redirect verbose command output to files, grep for the metric.
+**What frustrates me.** Late-discovered failures. Breaking working functionality. Questions instead of recommendations. Vague references (give `file:line`). Generic AI fluff.
 
 ---
 
 ## Code Standards
 
-- Never typecast. Never use `as`. Prefer `unknown` + type guards over type assertions.
-- No `any`. Use proper types or `unknown`.
+- Never typecast, never use `as`. Prefer `unknown` + type guards over assertions.
+- No `any`. Proper types or `unknown`.
 - Explicit return types on exported functions.
 
 ---
 
-## Command Discipline (9 Rules)
+## Command Discipline
 
-0. **Classify before acting** (for any request likely to span >1 file OR >1 tool-call category; skip for pure Q&A and single-lookup requests — state classification in one line):
-   - INVESTIGATE → `/investigating-problems` skill
-   - PLAN → plan mode for single-session design; `/creating-specifications` for multi-session features needing persistent design docs
-   - IMPLEMENT → for changes >1 file OR touching core logic, verify plan exists first (Rule 6); for single-file edits <20 lines, proceed directly
-   - DEBUG (live issue) → check logs/error output FIRST (Railway, console, stderr), form hypothesis, THEN trace code. No plan mode.
-   - DOCUMENT → `/wrapping-session` or write docs only; NO new implementation.
-   
-   **Confirm-approach gate** (INVESTIGATE/PLAN only, skip for single-file or <5-min tasks): state approach in 3 bullets, wait for confirmation before spending tokens.
+**Rule 0 — Classify before acting** (requests spanning >1 file OR >1 tool-call category; skip pure Q&A and single lookups; state the classification in one line):
 
-1. **Baseline first**: when changes affect testable code (not docs, config, one-liners), run the project's check command BEFORE changes to know starting state
-2. **Read errors**: on first failure, STOP and read fully before retrying
-3. **No guess loops**: 3rd retry = stop and think or ask
-4. **Read before edit**: never edit a file you haven't read this session
-5. **Schema before query**: check column names before database queries
-6. **Verify before implementing** (for any IMPLEMENT task qualifying under Rule 0 scope): read the plan → read EVERY target file (output "Read {file}:{lines}" for each — evidence of reading, not claim) → run baseline checks BEFORE changes → gut-check scope (pause + surface if task is significantly harder than planned). After each task: verify no new test failures, update plan status, flag design flaws. **Test-first build workflow (Beck)**: for implementation touching core logic (not config, not formatting, not one-liners), user writes plain-language test expectations in `plan.md` ("when I do X, I should see Y"). Implement one test + minimum code to pass per "go". Do not work ahead of the queue. Watch for: functionality not asked for, unnecessary complexity, deleted/weakened tests (anti-cheat).
-7. **Evaluate before scaling**: for projects intended to run repeatedly OR serve users (not throwaway analysis scripts), write 3-5 automated assertions BEFORE the first feature — not after (Hamel). Wire them to run automatically. Assertions are project-specific; the practice of writing them first is universal. Then: automated recall/accuracy eval on FULL dataset before deploying to production OR scaling workload >10x. Manual spot-checks (even 10-20 queries) validate UX, not correctness. The eval harness is a GATE.
-8. **Review before presenting plan**: run `/review-plan` before ExitPlanMode. If REVISE, update and re-review. Never present an unreviewed plan.
+- **INVESTIGATE** → trace ONE concrete example (input / expected / actual / exact error artifact), quantify % affected, root-cause to `file:line` BEFORE proposing fixes
+- **PLAN** → plan mode (single-session); `/creating-specifications` (multi-session)
+- **IMPLEMENT** → >1 file or core logic: verify a plan exists (Rule 6). Single-file <20 lines: proceed
+- **DEBUG** (live issue) → logs first, hypothesis, then code. No plan mode
+- **DOCUMENT** → `/wrapping-session` or docs only, no new implementation. Authoring a spec with NEW decisions is PLAN, not DOCUMENT
 
-Full procedures: `/investigating-problems` skill.
+*Confirm-approach gate* (INVESTIGATE/PLAN/IMPLEMENT >1 file; skip single-file/<5-min): 3 bullets, wait.
 
-### Workflow Gates (Automatic — Don't Wait for User)
+**Rule 1 — Baseline first.** For testable-code changes, run the project's check command before changing anything.
 
-| Trigger | Action | Enforcement |
-|---|---|---|
-| User says "continue" / "catch me up" / "pick up" | Run `/catchup` | CLAUDE.md rule |
-| Plan mode for non-trivial work, problem unclear | Suggest `/premise-check` | Skill precondition |
-| Plan written in plan mode | `/review-plan` before ExitPlanMode | Rule 8 |
-| About to commit code changes | `/review` must have been run (flag file) | Hook gate |
-| Context consumed ≥ 35% / 45% / 60% (soft/hard/emergency) | Run `/wrapping-session` | `context-wrap-trigger.js` runtime hook (P57 fix) |
+**Rule 3 — No guess loops.** Third retry = stop and think, or ask. Fetch the docs rather than guessing a config schema (5x, most recent 2026-08-04).
 
-### Proactive Suggestions (Suggest, Don't Auto-Run)
+**Rule 5 — Schema before query.** Check column names before database queries (24x).
 
-| Observation | Suggest |
+**Rule 6 — Verify before implementing.** Read the plan → EVERY target file → baseline checks → gut-check scope (surface if much harder than planned). After each task: no new test failures, update plan status. Core logic is test-first: plain-language expectations in `plan.md`; one test + minimum code per "go"; don't work ahead of the queue.
+
+**Rule 7 — Evaluate before scaling** (anything that runs repeatedly or serves users). 3–5 automated assertions before the first feature, wired to run automatically. Full-dataset eval before production deploy or >10x scale-up. Manual spot-checks validate UX, not correctness.
+
+**Rule 8 — Review before presenting a plan.** `/review-plan` before ExitPlanMode. Known bias: adversarial by construction, favours retention over deletion (P38/P40). For reversible, measurable changes prefer a revert path + logged eval over its verdict — say so and give the reasoning.
+
+
+### Gates
+
+| Trigger | Action |
 |---|---|
-| Changes spanning >3 files OR touching core logic, no `/review` yet | "Run `/review` before committing" |
-| Context consumed ≥ 37% with uncommitted work | "`/wrapping-session` now to preserve progress?" (verbal nudge between soft 35% / hard 45% hooks) |
-| Vague feature idea | "Want `/premise-check` before planning?" |
-| Post-commit, no push, session ending | "Push, or save for next session?" |
-| Plan mode for unfamiliar domain/library, no `research/` artifact | "Want `/research` first?" |
-| Debugging LLM responses via terminal one-at-a-time, or inspecting >10 queries manually | "This is the friction Hamel warns about — time for a trace viewer?" |
+| "continue" / "catch me up" / "pick up" | Run `/catchup` |
+| PLAN/IMPLEMENT >1 file, approach unstated | `/grill-me` before confirm-approach bullets |
+| Plan written in plan mode | `/review-plan` before ExitPlanMode |
+| About to push a slice / open a PR | One `/review` slate over the FULL branch diff vs base — per slice, not per commit (owner, 2026-09-04). Per commit: self-check. |
+| Context ≥ 35% / 45% / 60% | `/wrapping-session` (auto-fired by `context-wrap-trigger.js`) |
+| Changes >3 files or core logic, no `/review` | Suggest `/review` before committing |
+| Rule 0 classifies the work as PLAN **and** the request names a thing to build that does not yet exist | Run `/premise-check` before planning |
+| Plan mode, unfamiliar domain, no `research/` artifact | Suggest a research pass |
+
+Hooks enforce the rest — `cd` persistence, skill slugs, test-assertions, eval-first, D-entry timing, wrap collisions, alignment. Don't re-explain in prose what a hook already blocks (P16).
 
 ---
 
-## Teaching Mode (Always On)
-For actions with non-obvious rationale (not routine tool calls, not trivial edits): **What** we're doing, **Why** this approach, **Takeaway** applicable elsewhere. Brief.
+## Environment
+
+- Every project gets a `telemetry/` directory at root (session metrics for `/wrap`). Check during `/catchup`; create silently if missing.
+- Research artifacts: `research/YYYY-MM-DD-topic.md` at project root. Full shape (frontmatter, sections, evidence minimums) → governance.md § Research artifact template. Documents what IS, not what SHOULD BE.
+- **Model allocation** (owner, 2026-09-23): main session **Opus 5.5** (`opus[1m]`, effort medium); `advisorModel: none` (owner: fired on trivia, burned tokens). Main → Fable only if Opus at xhigh fails. Subagents: **Opus** (default) or **Sonnet** (mechanical batch). Every `Agent` call names `model:`. History: governance.md.
+- **Tool routing** (operator-set): research/docs → Exa (`web_search_exa`, `exa:search`); WebSearch only for exact-string/recency; library docs → Context7. Browser work (incl. driving a web console) → `agent-browser`, not the Chrome MCP; boot the dev server first. Pricing → openrouter.ai provider pages, not `claude-api` (see governance.md).
+- **Delegation is pre-authorized, standing** — big greps/test runs/log trawls → subagent (else redirect to a file, grep the metric); any skill whose steps mandate fan-out (`/review`, `/review-plan`, `/autonomous-batch`) — invoking it IS the request. Never silently downgrade a mandated slate: name skipped agents and why.
 
 ---
 
 ## Mistake Patterns (Don't Repeat)
 
-<!-- Table policy, skill-coupling contracts, learnings index, deferred Move 4 scope: ~/.claude/governance.md (maintainer-only, not auto-loaded). Last full first-principles prune timestamp lives in the file-head HTML comment per /prune-memory SKILL.md:72 contract. 2026-05-31 velocity-prune: 11 stale 1x rows (Apr 18–27) → private OS learnings archive. -->
-
-
-| Pattern | Times | Rule | Last |
-|---|---|---|---|
-| Wrote DB code without reading schema first | 20x | Rule 5 | 2026-04-14 |
-| Skipped log check, went straight to expensive code exploration. For any local-dev page-won't-load: `curl` + tail Rails log are TURN-1, browser diagnostics TURN-5+. → private OS learnings archive (3 sub-incidents). | 8x | P10 | 2026-05-28 |
-| Asserted current state without verifying — read source-of-truth (file, UI, FK chain, output artifact, prod entry-point, installed framework source) before claiming; applies at recommendation-level too. Sub-class keywords: doc-fetch-external-products · framework-internals-at-installed-version · stale-internal-session-notes · scaffold-class-spec-vs-memory · sampled-audit-surface-not-whole · status-file-body-not-filename · per-worktree-artifact-identity (resolve file via `git rev-parse --show-toplevel`) · feature-existence-via `strings <binary>` · "works-in-tool-X-not-Y"→capture-failing-tool-log-first · cross-session-branch-base (`git config branch.<name>.merge` vs project PR-target rule before first commit) · convention-precedent-on-feature-branch-not-default (grounding an API/contract convention against the DEFAULT branch misses precedent living only on an unmerged feature branch — `git ls-tree <feature-branch>`/check sibling worktrees before asserting "the convention is X"; one API convention lived only on an unmerged feature branch, not on the default branch) · git-hook-existence (a worktree's `.git` is a FILE; hooks live in the shared common-dir — check `git rev-parse --git-path hooks` / attempt a commit, NOT just `.githooks/`+`core.hooksPath`; trust the spec when it names a gate) · resolved-status-pointer-drift (a fact's canonical file is updated to RESOLVED but its POINTERS — auto-loaded MEMORY index lines, workflow docs, cross-refs — still read active; the auto-loaded pointer wins in-context and you repeat it without opening the source. On resolving/changing ANY status, grep ALL refs + reconcile, not just the source file. Reinforcer: reconcile the claim against THIS session's own observed evidence — a successful `gh pr create` under the supposedly-flagged account disproved the "account-flagged/404" caveat I still stated twice). · systemic-bug-claim-without-base-rate-check (claimed a live VCF-phone-extraction bug from code-reading + a "find-the-broken-rows" query that is structurally blind to BOTH the success path AND the silently-skipped path; the positive base-rate check `415/415 live providers have phones` refuted it in one query — when about to assert a SYSTEMIC bug, run "does the common case work?" FIRST; a find-the-broken query's emptiness is not evidence of absence). · inherited-metric-as-current-truth (presented an S5-derived "415 usable" number AND a strict-skeptic verification FLOOR "56%" as ground-truth point-estimates; user rejected both — tag every metric current-research-vs-inherited, and report verifier-strictness-sensitive metrics as a RANGE [lenient↔strict], not the floor as a point). · ground-against-rendered-view-not-schema-line-or-serializer (a contract/port grounding must terminate at the VIEW that renders the field — follow template→linked-view chains; a `schema.rb` line can be the wrong table + a serializer omits conditional-render. A real mis-grounding of a rendered field was caught by review). · cited-LINE≠call-chain (a fabricated contract claim came from summarizing the cited line; `:2884` is `perform_async` ASYNC one hop down — trace one hop past any line you cite). · described-a-rendered-artifact-from-NOTES-not-the-artifact (called a prototype a "crude reject" from notes alone; the owner's screenshots showed a polished layout worth borrowing — OPEN/view the artifact before characterizing its content or look). · operator-recollection-transcribed-not-grounded (operator states a model/decision/structure FROM MEMORY — tell: says "three" then lists four — and I crystallize it into a spec instead of grounding vs the decision record + surfacing the contradiction; once wrote a "4-level model" from a loose verbal list when the canonical record differed; the user: "I am surprised you do not question this". When the operator asserts structure from memory, VERIFY-and-QUESTION against the record, don't transcribe). Full narratives (35 sub-incidents): private OS learnings archive. | 52x | P42 | 2026-06-24 |
-| Substituted approach without checking plan. → private OS learnings archive. | 5x | Rule 6, 8 | 2026-04-14 |
-| Declared victory on insufficient evidence. Read a deviation-heavy *calibration* sample (mine 50%>44%) as signal that reasoning beats the baseline; the representative full set refuted it (66.7%<74.6%) — a P49 outlier-sampling extrapolation. Run the representative/full population before any "it works" claim; a top-K-by-hardness slice measures the tail, not the mean. | 4x | Rule 7 / P49 | 2026-06-13 |
-| Removed/changed user content without understanding full purpose | 2x | — | 2026-02-07 |
-| Guessed tool config schema instead of fetching docs first (3 failed hook formats; 6 failed DB queries without loading .env) | 2x | Rule 3 | 2026-03-31 |
-| Fought platform conventions instead of studying the working example — when an adjacent codebase / reference repo / proven pattern already solves the same problem, study it wholesale before iterating. Detection: ≥3 retries on the same fight, OR conviction that "one more tweak" will work. → private OS learnings archive. | 5x | — | 2026-04-28 |
-| Ignored explicit user request and jumped to implementation / over-catalogued presentation. When user's request is a verb (capture/review/summarize), do that verb in the simplest form first. **Sub-pattern: advice-request ≠ action-authorization** — user asked "what's your suggestion?" re: pushing; I pushed immediately; the auto-mode classifier blocked it (correctly). A question seeking your opinion is NOT a go-ahead for outward/irreversible actions — answer it, THEN get explicit consent. → private OS learnings archive. | 4x | Rule 0 | 2026-06-22 |
-| Bash tool `cd` persists across calls (parallel + sequential + wrap subdir-drift) — use `git -C <path>` or absolute paths. Full statement: P34. **5x → escalation overdue (crossed at incident 4).** | 5x | P34 | 2026-05-19 |
-| Invoked `Skill` tool with CLAUDE.md shorthand (`/wrap`) instead of slug (`wrapping-session`). Detection: `Unknown skill:` error. | 3x | P2 | 2026-04-21 |
-| Delegated deterministic verification to LLM checker. Post-process spine in code. → private OS learnings archive § P53. | 3x | P48 / P53 | 2026-04-26 |
-| Decision-doc entries authored at wrap, not decision-time — batching to the wrap commit is forbidden. Detection: a decisions.md entry appearing only in the wrap commit. 3x → hook-block overdue. → private OS learnings archive §2 | 3x | Authoring Discipline | 2026-05-15 |
-| Negative-assertion test (`should_not_receive`/`not_to raise_error`) can pass via an unrelated upstream crash, not the code under test. **Also POSITIVE `to raise_error(Klass)` satisfied by an unrelated crash of the SAME class** (a positive `to raise_error(RecordNotFound)` was satisfied by an unrelated crash of the same class, not the guard under test — caught in spec design, example dropped). Rule: prefer positive expectations; fixture must reach the bad outcome via ONLY the code under test; always pair a positive case. → private OS learnings archive §5 | 4x | Rule 7 | 2026-06-18 |
-| Echoed secret while verifying state — `grep VAR file`/`echo $TOKEN` print the value to stdout AND the transcript. Use presence/length primitives (`${#VAR}`, `grep -c`, `[ -n ]`); never print the value. ALWAYS rotate a leaked secret. → private OS learnings archive §6 | 2x | — | 2026-05-25 |
-| Non-interactive zsh subshells (Bash tool, CI) source `~/.zshenv` NOT `~/.zshrc` — vars for agent-spawned subprocesses must go in `~/.zshenv`. Symptom: `${#VAR}`=0 in the Bash tool despite `source ~/.zshrc` working interactively. → private OS learnings archive §7 | 1x | — | 2026-05-25 |
-| Meta-protocol shortcut — authored a design/planning artifact (project spec, OS-documentation, README/skill/governance) without the OS's own planning protocol; **recognition trigger: about to author a spec/design doc → it's Rule 0 PLAN (run `/review-plan` first), NOT DOCUMENT** (DOCUMENT = crystallizing an already-decided plan; if it encodes NEW design decisions it's PLAN). Caught on `ayush-cc-stack` README draft: 4.3K words preaching `/review-plan` discipline, no plan mode invoked, no `/premise-check` formally run, no `/review-plan` before drafting. Meta-recursive work (output IS the workflow) most prone to "thinking-IS-planning" shortcut — apply Rule 0/6/8 with EXTRA discipline, not less. Privacy direction stated 5 turns earlier had also paged out; draft disclosed business names + hyperlinked private URL. Re-grep prior turns for privacy directives before any user-facing drafting pass. → private OS learnings archive. Recurrence: wrote+committed a design doc as DOCUMENT → skipped `/review-plan`; it held PLAN-level decisions, one premise-wrong, caught by the user not by me. | 2x | Rule 0/6/8 | 2026-06-13 |
-| Dispatched a third-party (`compound-engineering:*`) skill/agent while an unconsidered local `~/.claude/skills/` equivalent existed — bug is SKIPPING the fit-evaluation, not the pick. Fix: at routing, enumerate local+third-party and pick by FIT (esp. when fanning out via the Agent tool, whose menu hides local skills). → private OS learnings archive | 2x | Rule 0 | 2026-05-31 |
-| Parallel `/wrap` sessions in `~/.claude` collide — concurrent wrap's `git add -A` sweeps the OTHER session's unstaged files into its commit, mis-attributing them. Detection post-wrap: file's `git log` ancestry shows it landed in a different session's wrap commit. Interim: stage explicitly, never `git add -A`. Fix on `/hook-review` 2026-06-01 agenda **URGENT (escalating)**: per-session staging area OR wrap-mutex. → private OS learnings archive (6 fires; latest 2026-05-31 — both sessions staged only their own files → content intact, but work scattered across 3 commits; **mutex = #1 build in the hooks session**). | 6x | — | 2026-05-31 |
-| Two sessions on one repo → `git switch` by either clears the staged index for BOTH (index follows the worktree, not the branch). Detection: branch changed mid-session. Rule: one writing session per repo; second is read-only OR `git worktree add`. → private OS learnings archive §8 | 1x | — | 2026-05-26 |
-| Publication-system metadata (commit author/committer, package.json author, deploy config, CI env) leaks independently of file-content denylist greps — caught at publish-boundary `git log -1` pre-flight, not by upstream D7 sweep. P35-class extension to publication channels. Fix: enumerate every disclosure channel + audit independently before publish. → private OS learnings archive Key Insight 1. | 1x | P35 | 2026-05-26 |
-| Designed `claude -p` headless dispatch for "subscription only" work without checking billing — claude -p is per-token API-billed; Agent-tool subagents bill against subscription. Pivot to Agent tool. Full detail: P70. | 1x | P70 | 2026-05-28 |
-| Find-replace token rename corrupts inflected/compound forms — `s/reject/unapprove/` made "rejected"→"unapproveed"; residual-old-token grep gave a FALSE all-clear. Trigger: token is also an English word/literal. Fix: grep the POSITIVE target + malformed-stem forms. → private OS learnings archive §9 | 1x | P42 | 2026-05-29 |
-| `grep -v <token>` as a verification filter gives FALSE negatives — a line with BOTH excluded+sought token is dropped whole, so "is X used?" wrongly says "no" (deleted a live local → NameError). Fix: grep POSITIVELY for X, read every hit. → private OS learnings archive §10 | 1x | Rule 1 | 2026-05-30 |
-| Stub-of-nonexistent-method aborts the whole setup hook → fake "stub doesn't work" mystery (stubbing an absent method RAISES, aborting later stubs). Trigger: a stub "has no effect". FIRST check the target exists (`respond_to?`) + no earlier stub raised. → private OS learnings archive §11 | 1x | Rule 3 | 2026-05-30 |
-| Built a feature from a SELF-GENERATED audit finding the user never asked for (audit "cold-projects" was itself a data error → cold-flag added to /catchup, reverted on user "why did we build this?"). An audit finding ≠ build mandate: before building anything derived from your OWN analysis (not a user ask), confirm the user actually has the problem. Distinct from "ignored user request" — here the request was INVENTED. → private OS learnings archive | 1x | Rule 0 | 2026-06-01 |
-| Ran an OFFLINE-analysis LLM script against a metered PRODUCTION API key (a metered LLM key shared with a live service, injected via the deploy runner) instead of the Claude subscription → exhausted the account's quota mid-run and broke the live service's LLM calls until top-up. Pattern-matched to the prod codebase's metered-API usage without asking "live-test or offline-analysis?". Trigger: about to deploy-run an LLM script whose purpose is ANALYSIS (not exercising the actual product) → route to the Agent tool (subscription, flat-rate, isolated), NEVER the prod/metered key. → project private OS learnings archive | 1x | P70 | 2026-06-02 |
-| Scope-balloon without rescope — a narrow ask ("verify §1.2 + write its test") grew into a 14-flow + product-code refactor mid-session with no reconfirm. A user's "is this really necessary?" is a STOP-and-rescope signal, NOT a cue to justify continuing. Trigger: work now spans many files/systems beyond the original ask OR the user questions necessity → stop, restate scope+cost, get explicit go before more edits. **Sub-trigger — test≠ship:** built production-grade (shared-module extract + refactor of code under someone else's ACTIVE review + full specs) for a throwaway STAGING TEST; user "too many changes / worth it?" → reverted. Match build-weight to the goal: an experiment wants the minimal reversible change (≈1 file + 1 flag), NEVER a refactor of in-review code. → private OS learnings archive | 2x | Rule 0 | 2026-06-16 |
-| Theorized about env/key/dependency cause for a regression in code that WORKED before, instead of diffing last-known-good vs deployed FIRST. User had iterated successfully Fri/Sat (rules out key/gem/network *by construction*); I still floated "ANTHROPIC_API_KEY not set" + "gem 1.1.0→1.43.0 drift" before diffing — user pushed back twice. Trigger: **"worked before, broke after a merge/deploy" → the diff (last-known-good branch vs deployed) IS the log; run it turn-1, localize to the DELTA, do NOT theorize about the environment.** (Here a squash-merge resurrected a deleted JS call → ReferenceError; the diff was 3 lines.) → private OS learnings archive | 1x | P10/P42 | 2026-06-22 |
-| Fanned out N research agents on the PERIPHERY (design/stack/tooling/data) before reading the CORE vision/architecture docs the user NAMED — heavy motion, thin core grounding; the user's "I'm nervous, did we actually understand this?" was the signal. Read the user-pointed-to core/vision/spec doc FIRST (esp. if pointed at ≥2×), before peripheral fan-out. Core-before-periphery — sibling to logs-before-code (P10). Also surfaced: don't dress a v1-sequencing call ("deterministic-first") as an architecture ceiling ("AI has no role") — owner corrected the spine-only→spine+crown framing. → private OS learnings archive | 1x | Rule 0 | 2026-06-23 |
+In `evals/mistake-ledger.md`, not loaded (re-add rule: see its Protocol). The three
+highest-firing — P42, P10, P72 — stay inline above.
 
 ---
 
 ## Principles (Hard-won — global / cross-project)
 
-> Compress but don't delete; combine only when recognition triggers are genuinely identical. **LLM-eval-pipeline-specific principles** (P52, P54, P56, P60, P61) routed to a project-specific CLAUDE.md (2026-05-04) — they only fire on LLM-as-judge / LLM-extractor work. P-numbers preserved for cross-reference resolution.
-
-1. Changing a function's signature, return type, or output format → grep ALL callers AND hardcoded values producing that format
-2. Fix root cause, not symptoms — one structural rule beats N per-case patches
-3. Multi-layer bugs: fix one, re-test, diagnose next (isolate each fix's effect)
-4. Validation belongs at persistence boundary, not callers (shared guard pattern)
-5. LLM prompts: concrete examples > abstract rules (one example + one rule > paragraphs)
-6. Competing general instructions override specific rules — fix the general one's scope
-7. Check if data is already parsed before adding new parsing (3-line threading > new parser)
-8. For independent batch work, launch parallel agents in a single message (~4x speed). **At task start, assess whether the work decomposes into independent READ/research units — if so, fan out by default.** Do NOT fan out writes that share a file OR touch security-critical / cross-tenant paths (P64 integration drift + P70 fan-out-write quality risk): read in parallel, write the dangerous parts yourself. The assess-at-start step is a deliberate disposition, not the model's default.
-9. One-time scripts with relaxed thresholds are liabilities — delete when purpose is served
-10. **Logs first, code second** — when debugging live production issues, check deployment logs before exploring code
-11. Scope guards and early returns narrowly to the specific condition — overbroad guards break unrelated features; early returns that bypass unrelated handlers cause silent feature breakage. Audit what downstream logic is skipped before adding either.
-12. When two pipelines diverge, understand WHY each was built that way before harmonizing — the older one may encode hard-won domain lessons
-13. Context signals in LLM prompts = soft hints subordinate to primary criteria — prevents over-indexing on the new signal
-14. LLM prompt position = priority — restrictive rules placed after permissive anchors are effectively dead; hard overrides must appear before the default decision point
-15. Automated tests primary, manual supplementary — if fix touches testable logic, write an automated test; if it touches LLM prompts or integration behavior, run the eval harness
-16. Deterministic rule → enforce in code, not in LLM prompt. Deterministic checks beat prompt instructions that compete with token salience. Retrospective variant: if you've tuned a prompt 3+ times for the same bug class, stop iterating — the LLM has a competing anchor you can't outweigh with more words; escalate to code.
-21. Structured output `max_tokens` includes schema enforcement overhead — budget 2x expected content tokens. Use fail-closed defaults (keep-sets, not reject-sets) so truncated responses reject unknowns instead of leaking them through
-22. LLM extraction of structured data (phones, emails, IDs) from unstructured text requires deterministic post-validation — verify the extracted value's characters actually appear in the source
-23. Scale-up ≠ redesign — existing scripts + DB state ARE the spec. Read the small-scale scripts, cross-check DB, plan only the delta (batching, rate limits, checkpointing). Do not re-investigate decisions the prior run already settled.
-24. Context is finite in plan mode — every agent launch, file read, and `/review-plan` consumes context toward compaction. If planning triggers compaction, the plan is too complex or exploration too broad. Simplify.
-25. Replicating a working system → check its production logs FIRST (one command). Code shows intent; logs show reality. More informative than any amount of code reading.
-26. Guards on identity flags (fromMe, isOwner, isAdmin) in shared-identity systems must be tested with the actual user flow — flag semantics may differ from labels. Deploy → test → verify before pushing to production users.
-28. Cached LLM verdict inconsistent with its own contract → post-process with a rule, don't re-judge. Re-judging costs money, introduces non-determinism, invalidates the artifact. Corollary: design verdict schemas to carry ancillary context (input features, counts) for retroactive normalization.
-30. Duplicated state across fields is a bug class, not a bug — if B is derivable from A (reverse index, denormalized column, mirrored type, cached aggregate), store only A and derive B at read time. Storing both means every write must touch both; the one you forget becomes silent inconsistency. Tactical fix = validation check; structural fix = eliminate the duplication.
-32. Inversion beats optimization when unknowns are many — ask "what would catastrophically fail?" before "how do we build the best X?" Forward questions generate wish-lists (unfalsifiable); inverted questions generate constraints (falsifiable). Munger's "invert, always invert." Corollary: when a design lists >3 desirable properties (right + fast + cheap + proactive + low-friction), trigger "which 3 per task type?" — uniform architecture across heterogeneous tasks is the mistake.
-34. Bash tool's working directory persists across calls — within one message (parallel: `cd` in one call propagates to siblings) AND across messages (sequential: `cd scripts/X && …` leaves cwd there for the next call). Use `git -C <path>` or absolute paths when operating across repos / between subdirectories.
-35. Filter/scout pipelines silently miss anything outside their source list — the gap is rarely the specific URL you noticed, it's the *category* it represents. When one miss surfaces, expect siblings; fix the category (add source class + backfill state), not the URL.
-36. Filter/discard rules near learning loops — any "capture X only when Y" rule adjacent to a feedback loop must be inverted: *would the loop still work with only Y=true cases?* If learning needs Y=false cases too (routine overrides, quiet successes, non-flagged decisions), replace conditional capture with unconditional capture + downstream filtering. Detection: forward review approves the rule as "clean"; inversion catches the silent discard. Distinct from P35 (missed sources) — P36 is discarded signal from *known* sources.
-37. Structured-output LLM schemas enforce only `required`, `type`, `enum` — `minLength`, `minItems`, `pattern`, `format` are silently ignored. A Zod `.min(1)` lets the model emit `""` (passes provider schema, fails client parse), so your parse-failure path becomes the real behavior. If that path is fail-open, strict schemas regress worse than lax + post-parse enforcement. Decide fail mode first, then schema strictness. (Corollary to P21: the fail-mode enforcement layer lives downstream of the parse boundary.)
-38. Verdict asymmetry = bias direction — if a classifier schema requires justification on one branch but allows empty on the other, the model minimizes effort and defaults to the empty-allowed branch. Fix symmetrically: require justification on both branches, or neither. Detection: grep verdict logs for `reason: ""` on the permissive branch — presence = asymmetry bug.
-39. Cross-pollinate parallel design tracks — when two artifacts share a domain but differ in architecture, surface decisions from one as *candidates* (for review, not auto-copy) for the other. Highest yield after forward review has handled each in isolation. Detection: a reviewer returning from a large doc with only one narrow question = attention-focus, not soundness; trigger the cross-pollination pass.
-40. Forward review cannot see its own blind spots — it asks "is this good?" inside the solution space it already imagines; it can't see silent discards (P36), verdict asymmetries (P38), retrieval blind spots, or opaque evidence. Inversion ("what would fail?") is a required complement, not enhancement. Detection: when many reviewers agree and the doc is large, the *absence* of objections is itself the signal to run inversion. (Corollary of P32.)
-41. Inversion must touch concrete UI/UX/operational reality, not abstract spec flow — else both passes anchor on the same hallucinated model and produce confident wrong corrections (callbacks for states that can't exist, queries for events that never fire). Before accepting an inversion finding that prescribes a new callback/query/event/state handler, trace the flow in the live product. Detection: inversion invokes a user action ("admin toggles X") — verify it's actually possible at that point in the UI; the flow may not exist. Complement to P40 — inversion catches blind spots *only if* grounded in reality.
-42. Compressing external sources into synthesis drifts toward narrative coherence over source fidelity — you soften quotes, stretch scope, inflate counts, merge distinct claims. Forward review won't catch it (it operates inside your framing). Required complement: a **source-fidelity pass** — re-read verbatim quotes against your synthesis before acting. Detection: phrases in your synthesis that don't appear verbatim in any fetched quote are yours, not the source's. Extends P40 to extracted-source drift.
-43. Contaminated inversion — if the adversarial reviewer is primed with forward hypotheses, the "inversion" is confirmation, not critique. Detection: your reviewer's prompt mentions specific items, rows, or categories you noticed in advance. Clean-room setup: generic reviewer prompt, no observation hints. Extends P40/P41.
-44. `pkill -f <wrapper>` doesn't cascade to child processes — killing a Python/shell wrapper leaves its subprocesses running; they complete on their own schedule and may silently write output AFTER the "kill," clobbering later-stage artifacts. Reliable tree-kill: `pgrep -P <pid>` to enumerate + kill children explicitly, or trap SIGTERM and forward. Distinct from P34 — this is parent→child signal propagation.
-45. Refactor phasing by risk gradient, not conceptual completeness — sequence multi-step refactors by ascending risk (path-safe → live-code → architectural) and gate each phase on a trigger. Cheapest-first + gated is safer AND recoverable: when the gate answer changes, deferred phases unblock without lost work. Detection: any refactor with a "Phase 1" bundling low- and high-risk moves. Highest-risk class is NOT junk debris but *plausible-but-wrong lookalikes* (stale prompt drafts, obsolete runners with contradicting rules) — prioritize over clutter.
-46. Uniqueness keys foreclose aggregation; dimensions preserve it — every field added to a UNIQUE constraint prevents future cross-slice aggregation without migration; every field recorded as a *dimension* preserves every projection as a runtime query. Default to smallest viable key + richest dimensions: for each UNIQUE field ask "can this be a dimension instead?" Detection: schema proposals with 3+ fields in UNIQUE. Corollary: *accounting* separation (P&L, tenant isolation, region compliance) is report-time; it does NOT imply scoring-time separation.
-47. Defensive-by-construction output catches maker errors before the checker arrives — any aggregation/analytics/recon script must emit the fill-rate of EACH upstream source column it consulted as a first-class artifact (not a log). The coverage table is the first thing readers scan, so wrong-column choices and silently-sparse sources surface before the aggregate hardens into an interpretation. Detection: an aggregate script whose output starts with a headline number, not a source-coverage table — flip the order. Extends P40.
-48. Audits have a deterministic spine (counts, strings, column existence, schema match) and a judgment crown (interpretation). Delegate the crown; execute the spine directly. LLM subagents smooth plausibly — hallucinated denominators that preserve real percentages beat arithmetic fidelity. Detection: audit report cites numbers without `file:line` refs to the source. Corollary: P43 clean-room independence scopes to judgment, not arithmetic. Extends P47 to the checker's report.
-49. Sampling strategy must match the question. "What does this field typically contain?" → random sample. "What drives the outliers / where does it fail?" → high-entropy / top-K sample. Extrapolating *typical* content from outlier samples is selection bias — confident wrong conclusions from REAL DATA. Detection: a conclusion about "what this field/population is like" drawn from top-K-by-anything samples alone — ask "typical case or tail?" first.
-50. Splitting similar-shape tokens → right-context carries the signal, not adjacency. Detection: splitter works on the target case but breaks adjacent same-shape cases → predicate reads the wrong side. → `principles/P01-right-context-token-shape.md`
-51. Paired-semantics components drift silently — when maker/checker, generator/validator, producer/consumer, or client/server share a two-sided contract and only one side changes, each stays internally consistent while the gap carries the bug. Detection: per-batch OK-rate *variance* doubles when contracts mismatch, returns to baseline when aligned — variance, not mean, is the signal. Fix: scope `/review-plan` to "this component + any paired component". → `principles/P02-paired-semantics-drift.md`
-53. Artifact self-identification — runtime config that must hold across runs (model, prompt version, temperature, seed, schema version) belongs in the artifact schema, not inferred from spec + filename + commit message. Detection: any pipeline where `git log | grep <config>` is your plan for "what produced X" — bake config into the output. Corollary: field-copying is deterministic-spine work (P48). → `principles/P03-artifact-self-identification.md`
-55. Mature prompts exhibit non-locality — narrow edits produce broad aggregate regressions across unrelated categories; the target edit lands correctly AND the aggregate regresses. Detection: run a full-sample re-eval after any prompt edit (target-case test is necessary but not sufficient per P50); aggregate regression > noise with category shifts on non-target categories is the signature. Structural fix: move declarative content (vocabulary, codebooks, routing tables) OUT of the prompt into modular stores where edits compose. **Scope:** evidence base is *narrow-exemplar edits*; does NOT uniformly extend to *anchored universal-philosophy clauses* or anchored sub-rules with worked examples — those warrant per-edit evaluation, not blanket P55 (over-application caused a multi-session "zero-edit streak" calibration error). → `principles/P04-mature-prompt-non-locality.md`
-57. Suggestion-based workflow gates that depend on agent-attention nudges fail silently — when context is busy, the nudge never fires, and the failure is invisible (no error, just absence). Bake the action into a skill that's already running, or auto-fire it (hook/cron); don't rely on Claude to remember to suggest it. Detection: count how often the gate's trigger was true vs. how often the suggestion actually fired across N sessions — a large gap = the mechanism is failing. Risk-profile-asymmetry smell: a gate on one branch but not another with no articulable risk difference is misplaced. → private OS learnings archive
-59. Directional rules need bidirectional gold evidence before authoring — for rules of shape "X should be Y" / "X ↔ Y" (LLM judge predicates, eval gate rules, lint policies, taxonomies, schema validators), sample gold in BOTH directions BEFORE drafting; single-direction justification is insufficient even when intuitively obvious. Detection: an example list showing transitions in only one direction. Distinct from P51 (cross-component drift): in P59 the paired components agree on the rule text, but the text is wrong on *direction* — caught only by gold cross-check (e.g. a substitution rule authored from expansion-direction compounds was wrong on the acronym→expansion direction gold actually preferred).
-58. Static-set discriminators leak both directions — false positives (members who don't match the intent) AND false negatives (non-members who do). Before a rule of shape "if X ∈ {curated list}", ask: *what does membership MEAN, and can I detect that meaning directly?* If yes, route on the underlying signal — the set becomes redundant and the maintenance burden disappears. Detection: precision/recall degrade as the domain shifts; maintenance scales with N; first false-positive prompts a "we need an exception for X" patch. Distinct from P15 (which signal the rule consumes) and P50 (right-context). → `principles/P06-static-set-discriminators.md`
-62. Specs and implementation grow on independent timescales — when a spec accretes addenda (status notes, new check IDs) across sessions while implementation grows via separate scripts touched in different sessions, both stay internally consistent and forward review of either alone never catches the gap. Coverage audit (cross-referencing every spec item against actual implementation) is the only thing that surfaces the drift. Detection: a spec with >3 status addenda OR new rule IDs since the last implementation update; an impl script untouched K>5 sessions while its spec moved. Distinct from P51 (within-batch runtime variance) — P62 is asynchronous spec-vs-code drift (e.g. an inversion-checklist accreted 7 addenda + 5 check IDs while the impl covered only 4 of ~46 spine items; 12 uncovered surfaced only when a coverage matrix was built).
-63. Synthetic smoke tests miss defect-rendering branches. When a system renders OK-vs-defect cases differently (audit summaries, error UI, alert templates, eval gates, formatters), a 0-defect synthetic input never executes the defect branch — the first real-data dispatch is the implicit smoke for it, and real data ALWAYS has defects. Cure: synthetic smoke MUST include ≥1 defect-class record per renderer branch (one OK + one FIX + one FLAG, not just one OK). Distinct from P40 (review-side) and P49 (input sampling) — P63 is test-coverage blindness for *output* branches (e.g. a 0-flagged synthetic batch passed; the first real 9-flagged batch surfaced an audit renderer leaving every flagged record's source-text empty).
-64. Parallel sub-agent briefs are part of the work product — agents reproduce from their input surface, so a brief omitting production-side reference artifacts produces drafts that follow the spec but break against production reality (wrong paths, wrong field names, stale enums). The brief's read-list MUST include ≥1 production-side reference artifact (output sample, runtime config, live schema, an existing adjacent script) alongside specs/plans. Detection: bug-rate divergence between sibling agents with similar complexity but different read-lists; a draft that follows the plan but breaks at integration smoke. Distinct from P43 and P57. Cheap fix: ask "does this read-list show actual production reality, or only intended reality?"
-65. Right-size `/review` (and any multi-reviewer slate) to diff *shape*, not workflow-gate heuristic firing. Workflow gates ("touches core logic" / ">3 files changed") trigger consideration; they don't specify slate size. Calibration: 0 reviewers for templated single-file additions with green tests; 1 targeted reviewer for ≤2 files touching core logic with established patterns; full slate for multi-consumer contract changes / new architectural surface; ~13-agent two-tier sweep only at major checkpoints. Detection: reaching for `/review` by reflex on a +50 LOC pattern-template diff with green smokes — pause and assess shape first. Cost asymmetry: unneeded review costs context burn; missed review on a templated change costs ~zero (predecessor was already reviewed). Distinct from P40 (review *quality*) — P65 is about review *quantity sizing*. → Full case detail (worked example + calibration table): `~/.claude/principles/P09-right-size-review-slate.md`
-66. **Backfill-vs-greenfield asymmetry** — rule changes / migrations tested on fresh greenfield input may regress on data with accumulated state (manual fixes, prior pipeline outputs, cached signals). Greenfield unit tests are necessary but insufficient. Mitigation: dry-run probe against actual current state before any backfill; verify per-record diffs show no regression class. Detection: post-deploy regression that "couldn't happen because tests are green" → test inputs lacked accumulated-state shapes. Distinct from P63 (output-branch gap) — P66 is *input-state* gap (e.g. a fix passing 188 unit tests; dry-run on accumulated state surfaced 1 wiped manual-override + 2 duplications).
-67. **Hash-seed iteration order leaks into production writes — invisible to membership-based tests.** Code that serializes a Python `set` (or pre-3.7 `dict.keys()`) to a string / JSON / audit-log / signed-payload produces non-deterministic output across processes (each interpreter gets a different `PYTHONHASHSEED`). Membership tests (`assert "X" in result`) pass and mask it; only byte-wise comparison across processes surfaces it. Detection: run the same code in N fresh processes and compare verbatim. Fix: `sorted(set_var)` before iterate. Distinct from P15 (where the rule lives) — P67 is how set-derived output stabilizes (e.g. a helper returning a set produced 4 orderings across 4 processes; 1 LOC `sorted()` fixed it).
-68. **Skills and hooks are universal by construction; project-specific incidents live in `learnings/<date>-<topic>.md`, not in `skills/` or `hooks/`.** Detection: any skill/hook diff adding a session number, decision/record ID, business name, production schema fragment, or absolute `/Users/<name>/` path is the bug — extract the incident to `learnings/`, leave a synthetic shape or pointer. Anti-pattern: organic `/wrap` inline-capture extending into skill files (correct for CLAUDE.md/MEMORY.md/learnings/; wrong for skills/hooks). Enforced by `/skill-audit` (4 denylist regexes, quarterly; zero matches = pass). → `principles/P10-skills-universal-by-construction.md`
-70. **Agent-tool subagents for subscription-only autonomous work; subagents can now nest (up to 5 deep).** Two facts: (a) `claude -p` headless is per-token API-billed; Agent-tool subagents bill against the parent session's subscription — for subscription-only autonomy use the Agent tool with self-contained briefs, NOT headless. (UNCHANGED.) (b) **SUPERSEDED 2026-06-16** — old claim was "subagents are LEAF NODES, can't spawn sub-Agents, so fan-out skills silently degrade to single-pass self-review." As of v2.1.172 (2026-06-10) sub-agents CAN spawn their own sub-agents up to 5 levels deep — **verified empirically 2026-06-16** (a test subagent spawned a working sub-agent via the Agent tool). So fan-out skills (`/review`, `/code-review`, parallel-research) dispatched inside a subagent now actually fan out instead of degrading. Design-time check: still ask BOTH "subscription or API quota?" AND "does the subagent need to fan out?" — if yes, you can now let it nest. The **named-principle checklist with detection signatures** (not "review carefully") remains good brief hygiene as a graceful fallback (older versions / nesting disabled / depth-cap hit), since a named checklist still beats plausible-but-shallow self-review. → private OS learnings archive
-
-69. **Convergent /review = subject-level fix signal.** When two reviewers independently flag the SAME file:line from opposite attack angles, the SUBJECT is brittle — reach for a one-line strategy-level fix BEFORE comparing reviewer-specific cures; a single subject-level pin usually resolves both simultaneously AND tightens regression-detection beyond either specific cure. Detection: MUST + SHOULD on the same file:line; mutually-exclusive specific fixes; one strategy fix resolves both. Crystallized fix shape (codebase-stable over a 5-session streak): **replace count/set assertions with per-bucket positive bindings** (`find_by(key).quantity == N`) AND/OR **pair negative outcomes with positive call-site expectations** (`should_receive(:m).and_call_original`). Distinct from P40 (single-reviewer scope) — P69 is multi-reviewer convergence as the inversion signal.
-
-71. **Bulk LLM row-emission drifts out of positional alignment — audit in code, never trust membership counts.** When an LLM emits N output rows meant to align 1:1 with N input rows, it intermittently shifts output by one (row K gets K-1's content) or drops/dupes mid-sequence. Membership/count checks PASS (all ids present, mis-paired); only POSITIONAL comparison catches it — token-overlap of input[K] vs output[K] vs output[K-1]. Detection: a downstream verifier's FIX/mismatch rate spiking in a contiguous range. Fix: re-run the range with explicit per-row alignment self-verify; bake a positional-alignment + 1:1 completeness assertion (output ids == contiguous 1..N) into the pipeline. Intermittent, NOT batch-size-correlated. Distinct from P67 and P48 (e.g. 3 of 11 maker subagents shifted, one full 150-row block — invisible to id-membership checks).
-
-72. **A verification/gate check must be FALSIFIABLE — derive its two sides from INDEPENDENT sources.** A check comparing two values both derived from the same predicate/definition is a tautology that can never fail (e.g. `active == base − excluded` when the filtered set is DEFINED by that exact predicate). Detection: can you construct an input that makes the check FAIL? If no, it verifies nothing — recompute one side from a source UPSTREAM of the thing under test (raw table, not the derived view's own flags). Sibling to the negative-assertion-passes-via-unrelated-crash mistake-row (that's a check passing for the wrong reason; this is a check that cannot fail at all). Caught by `/review` on a self-authored reconciliation gate. **Recurrence (authored P72, then violated it a session later):** labelled a backtest grain cross-check "the independent P72 validator"; reviewer proved both sides algebraically equivalent → coherence guard, not independent. Lesson: authoring the principle does NOT inoculate (the "I know this trap" confidence is the anesthetic, P40); the genuinely-independent check often already exists — find it, don't relabel theatre onto the tautology, and don't ADD a "looks-independent" check reusing the same predicate. → private OS learnings archive.
+In `principles/INDEX.md` (+ `principles/PNN-*.md` narratives), not loaded. Triggers in
+the table above. P-numbers stay stable — learnings/ cross-references depend on them.

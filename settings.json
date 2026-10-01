@@ -1,4 +1,5 @@
 {
+  "cleanupPeriodDays": 365,
   "env": {
     "CLAUDE_ANTICHEAT_BLOCK": "1",
     "CLAUDE_EVAL_FIRST_BLOCK": "1"
@@ -8,7 +9,6 @@
       "Read",
       "Glob",
       "Grep",
-      "Agent",
       "Bash(grep *)",
       "Bash(cat *)",
       "Bash(ls *)",
@@ -22,7 +22,6 @@
       "Bash(git diff *)",
       "Bash(git show *)",
       "Bash(git branch*)",
-      "Bash(node -e *)",
       "Bash(npm run check*)",
       "Bash(npx astro check*)",
       "Bash(bash validate-graph*)",
@@ -40,14 +39,34 @@
     ],
     "defaultMode": "auto"
   },
+  "model": "opus[1m]",
+  "fallbackModel": [
+    "claude-opus-5",
+    "claude-sonnet-5-5"
+  ],
   "skillOverrides": {
     "catchup": "user-invocable-only",
     "hook-review": "user-invocable-only",
     "prune-memory": "user-invocable-only",
     "skill-audit": "user-invocable-only",
-    "telemetry": "user-invocable-only"
+    "telemetry": "user-invocable-only",
+    "audit-project": "off",
+    "publish-stack": "user-invocable-only",
+    "careful": "user-invocable-only",
+    "freeze": "user-invocable-only"
   },
   "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$HOME/.claude/hooks/hook-liveness-sessionstart.sh\"",
+            "timeout": 15000
+          }
+        ]
+      }
+    ],
     "Notification": [
       {
         "matcher": "permission_prompt",
@@ -66,7 +85,17 @@
         "hooks": [
           {
             "type": "command",
-            "command": "echo 'File modified — remember to run relevant check commands before committing'",
+            "command": "echo 'File modified \u2014 remember to run relevant check commands before committing'",
+            "timeout": 3000
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/hooks/session-manifest.js\" record",
             "timeout": 3000
           }
         ]
@@ -77,7 +106,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "if [ \"$(uname)\" = \"Darwin\" ]; then afplay /System/Library/Sounds/Pop.aiff; elif command -v powershell >/dev/null 2>&1; then powershell -c '[Console]::Beep(600, 200)'; fi && echo 'Turn complete. If there are pending tasks in the todo list, continue with the next one. Otherwise, check status line for context usage.'",
+            "command": "if [ \"$(uname)\" = \"Darwin\" ]; then afplay /System/Library/Sounds/Pop.aiff; elif command -v powershell >/dev/null 2>&1; then powershell -c '[Console]::Beep(600, 200)'; fi && echo 'Turn complete. Check status line for context usage.'",
             "timeout": 5000
           }
         ]
@@ -88,7 +117,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "if [ \"$(uname)\" = \"Darwin\" ]; then afplay /System/Library/Sounds/Sosumi.aiff; elif command -v powershell >/dev/null 2>&1; then powershell -c '[Console]::Beep(400, 500)'; fi && echo 'API error — rate limited or auth failure. Wait before retrying. Check status line for rate limit usage.'",
+            "command": "if [ \"$(uname)\" = \"Darwin\" ]; then afplay /System/Library/Sounds/Sosumi.aiff; elif command -v powershell >/dev/null 2>&1; then powershell -c '[Console]::Beep(400, 500)'; fi && echo 'API error \u2014 rate limited or auth failure. Wait before retrying. Check status line for rate limit usage.'",
             "timeout": 5000
           }
         ]
@@ -111,7 +140,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node -e \"const input = JSON.parse(process.env.CLAUDE_TOOL_INPUT || '{}'); if (input.command && input.command.includes('git push')) { process.stdout.write('WARN: About to push to remote — confirm before proceeding'); }\"",
+            "command": "node -e \"let r='';try{if(!process.stdin.isTTY)r=require('fs').readFileSync(0,'utf8')}catch(e){};if(!r.trim()&&process.env.CLAUDE_TOOL_INPUT)r=process.env.CLAUDE_TOOL_INPUT;let p={};try{p=r.trim()?JSON.parse(r):{}}catch(e){};const c=(p.tool_input&&p.tool_input.command)||p.command||'';if(c.includes('git push')){process.stdout.write('WARN: About to push to remote \u2014 confirm before proceeding');}\"",
             "if": "Bash(git push*)",
             "timeout": 3000
           }
@@ -168,12 +197,32 @@
         ]
       },
       {
+        "matcher": "Read|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/hooks/check-read-size.js\"",
+            "timeout": 3000
+          }
+        ]
+      },
+      {
         "matcher": "Bash",
         "hooks": [
           {
             "type": "command",
             "command": "node \"$HOME/.claude/hooks/check-wrap-collision.js\"",
             "timeout": 3000
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/hooks/check-d-entry-timing.js\"",
+            "timeout": 5000
           }
         ]
       },
@@ -199,6 +248,11 @@
             "type": "command",
             "command": "node \"$HOME/.claude/hooks/memory-size-gate.js\"",
             "timeout": 2000
+          },
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/hooks/check-alignment-gate.js\"",
+            "timeout": 2000
           }
         ]
       }
@@ -221,11 +275,13 @@
     "padding": 0
   },
   "enabledPlugins": {
-    "frontend-design@claude-plugins-official": false,
+    "frontend-design@claude-plugins-official": true,
     "code-review@claude-plugins-official": false,
-    "compound-engineering@compound-engineering-plugin": true,
-    "expo@expo-plugins": true,
-    "security-guidance@claude-plugins-official": true
+    "expo@expo-plugins": false,
+    "security-guidance@claude-plugins-official": true,
+    "context7@claude-plugins-official": true,
+    "exa@claude-plugins-official": true,
+    "compound-engineering@compound-engineering-plugin": true
   },
   "extraKnownMarketplaces": {
     "compound-engineering-plugin": {
@@ -241,7 +297,7 @@
       }
     }
   },
-  "outputStyle": "Explanatory",
+  "outputStyle": "Plain Coach",
   "spinnerVerbs": {
     "mode": "append",
     "verbs": [
@@ -252,12 +308,42 @@
     ]
   },
   "alwaysThinkingEnabled": true,
-  "effortLevel": "high",
-  "fallbackModel": ["claude-opus-4-7", "claude-sonnet-4-6"],
+  "effortLevel": "medium",
+  "modelSettings": {
+    "claude-opus-5-5[1m]": {
+      "effortLevel": "medium"
+    },
+    "claude-opus-5[1m]": {
+      "effortLevel": "medium"
+    },
+    "claude-fable-5-1[1m]": {
+      "effortLevel": "medium"
+    },
+    "claude-fable-5-1": {
+      "effortLevel": "medium"
+    },
+    "claude-opus-5": {
+      "effortLevel": "medium"
+    },
+    "claude-sonnet-5-5": {
+      "effortLevel": "medium"
+    }
+  },
+  "tui": "fullscreen",
   "skipWorkflowUsageWarning": true,
+  "theme": "dark",
+  "verbose": false,
   "autoCompactEnabled": false,
+  "remoteControlAtStartup": true,
+  "inputNeededNotifEnabled": true,
+  "agentPushNotifEnabled": true,
   "skipAutoPermissionPrompt": true,
   "autoMode": {
+    "soft_deny": [
+      "$defaults",
+      "Bash(railway * --environment production*)",
+      "Bash(git push:*)"
+    ],
     "hard_deny": [
       "Bash(rm -rf /)",
       "Bash(rm -rf /*)",

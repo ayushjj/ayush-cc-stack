@@ -5,7 +5,7 @@ Use topics from the active domain. Cross-domain assignment is allowed when an in
 ## AI Product Building (`domain: ai`)
 
 - `future-of-ai-business` — Industry trends, market shifts, AI business landscape
-- `ai-native-product-architecture` — Design patterns for AI-first products
+- `[redacted]` — Design patterns for AI-first products
 - `ai-agents` — Autonomous agents, tool use, agent frameworks
 - `ai-coding-tools` — AI-assisted development, coding copilots
 - `knowledge-systems` — Knowledge management, PKM, learning systems
@@ -16,11 +16,9 @@ Use topics from the active domain. Cross-domain assignment is allowed when an in
 - `psychology` — Human misjudgment, cognitive biases, behavioral patterns
 - `economics` — Microeconomics, incentives, moats, market dynamics
 - `mathematics` — Compounding, probability, Fermi estimation
-- `biology` — Evolution, adaptation, ecosystems, natural selection
 - `engineering` — Redundancy, feedback loops, margins of safety
 - `decision-making` — Inversion, second-order thinking, checklists
 - `philosophy` — Ethics, stoicism, pragmatism, epistemology
-- `physics` — Critical mass, equilibrium, entropy, phase transitions
 
 ## Rules
 

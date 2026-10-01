@@ -34,6 +34,6 @@ An audit that walks only this directory is incomplete (a false-negative class). 
 
 ## When to add a new hook
 
-Per principle `P10-skills-universal-by-construction.md`, hooks (like skills) must be universal-by-construction. A hook that hardcodes a project name, a session number, a record ID, or an absolute `/Users/<name>/` path is the bug — that incident belongs in a `learnings/` file, not in the hook source.
+Per principle `P17-skills-universal-by-construction.md`, hooks (like skills) must be universal-by-construction. A hook that hardcodes a project name, a session number, a record ID, or an absolute `/Users/<name>/` path is the bug — that incident belongs in a `learnings/` file, not in the hook source.
 
 The pattern for adding a hook: a failure class fires N+K times in the mistake table; the suggestion-based defense fails silently (principle `P04`-class: mature suggestion gates do not survive context busyness); promote to a deterministic gate; smoke-test on at least one real session before flipping to block mode. The `2026-05-18-hook-migration-phase-0-1.md` case study in `../learnings/` walks the canonical workflow including the latent-bug class to watch for.

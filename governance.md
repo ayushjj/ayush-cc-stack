@@ -31,13 +31,13 @@ Maintenance audits that fire every ~90 days. Aligned so both can run in one main
 
 | Skill | Cadence | Scope | Last run | Next due |
 |---|---|---|---|---|
-| `/prune-memory` | 90 days | CLAUDE.md mistake table + principles list; per-project MEMORY.md | 2026-05-25 | 2026-08-23 |
-| `/skill-audit` | 90 days | `~/.claude/skills/` + `~/.claude/hooks/` — universality binary gate (D1-D4 denylist regexes sourced from `~/.claude/.skill-audit-patterns`, user-private/gitignored) | 2026-05-26 (initial deploy) | 2026-08-23 |
-| `/publish-stack` | 90 days | Public stack snapshot (`ayush-cc-stack`) — prepare + leak safety-net; user runs final F-checklist sweep + push (decisions D5/D7). Nudged from `/prune-memory` final step | 2026-05-26 (2026-Q2 snapshot) | 2026-08-23 |
+| `/prune-memory` | 90 days | CLAUDE.md mistake table + principles list; per-project MEMORY.md | 2026-07-04 | 2026-10-02 |
+| `/skill-audit` | 90 days | `~/.claude/skills/` + `~/.claude/hooks/` — universality binary gate (D1-D4 denylist regexes sourced from `~/.claude/.skill-audit-patterns`, user-private, tracked in the private repo, never published) | 2026-08-26 | 2026-11-24 |
+| `/publish-stack` | 90 days | Public stack snapshot (`[redacted]`) — prepare + leak safety-net; user runs final F-checklist sweep + push (decisions D5/D7). Nudged from `/prune-memory` final step | 2026-06-24 (2026-Q3 snapshot) | 2026-09-22 |
 
 Update both `Last run` and `Next due` columns at each invocation. Each skill's SKILL.md also carries its own last-review timestamp (defense in depth — the in-skill timestamp is what `/catchup` surfaces if this table drifts).
 
-Cross-references: `~/.claude/skills/skill-audit/SKILL.md` (universality gate steps); `~/.claude/principles/P68-skills-universal-by-construction.md` (rule body).
+Cross-references: `~/.claude/skills/skill-audit/SKILL.md` (universality gate steps); `~/.claude/principles/P17-skills-universal-by-construction.md` (rule body).
 
 ---
 
@@ -47,16 +47,38 @@ Captured 2026-04-26 via Phase 0 grep before the governance restructure. These ar
 
 | Skill | File:Line | Contract | Risk if broken |
 |---|---|---|---|
-| `/wrap` | `~/.claude/skills/wrapping-session/SKILL.md:222` | Heading literal "§ Entry templates" must exist | Step 4 capture path fails |
-| `/wrap` | wrapping-session/SKILL.md:215 | Verbatim phrase "Persist findings inline — don't batch" | Skill quotes for filter logic |
+| `/wrap` | `wrapping-session/SKILL.md` — grep `§ Entry templates` | Heading literal "§ Entry templates" must exist | Step 4 capture path fails |
+| `/wrap` | `wrapping-session/SKILL.md` — grep `Persist findings inline` | Verbatim phrase "Persist findings inline — don't batch" | Skill quotes for filter logic |
 | `/catchup` | catchup/SKILL.md:83 | Mistake table `Last` date column present | "Watch out: ≤3 days ago" surface fails |
 | `/prune-memory` | prune-memory/SKILL.md:33 | Mistake table `Times` count column | "1x AND >90 days" eviction fails |
 | `/prune-memory` | prune-memory/SKILL.md:34 | Principle IDs `P{N}` exist | Grep-based eviction fails |
 | `/prune-memory` | prune-memory/SKILL.md:72 | HTML comment "Last full first-principles prune: YYYY-MM-DD" at file head | Quarterly cadence becomes opaque |
-| `/prune-memory` | prune-memory/SKILL.md:102 | "(last prune)" timestamp preserved on update, not removed | Schedule loss |
-| `/review-plan` | review-plan/SKILL.md:68-69 | Section names "Mistake Patterns table", "Principles list" | Dim 4 cross-reference fails |
+| `/prune-memory` | prune-memory/SKILL.md:102 | "Last full first-principles prune:" comment preserved on update, not removed | Schedule loss |
+| `/review-plan` | `review-plan/SKILL.md` — grep `evals/mistake-ledger.md` / `principles/INDEX.md` | Dim 4 reads both by path; the files must exist at those paths | Dim 4 cross-reference fails |
+| `/review` | review/scripts/write-review-flag.js ↔ review/scripts/check-review-gate.js (shared `scripts/diff-chunks.js`) | Flag JSON `{repo, verdict, ts, fileHashes}` at per-repo `$TMPDIR/.claude-review-done-<sha256(repo)[0:12]>`: writer hashes per-file chunks of `git diff HEAD`; gate re-derives via the SAME module and blocks only on an unreviewed CODE delta (S256 delta-aware; supersedes S47 full-diff hash) | Writer/reader drift → gate silently always-blocks (never matches) or always-passes (never checks) |
+
+| `/review` | review/scripts/classify-diff.js ↔ review/SKILL.md Steps 3/4/4.5 ↔ hooks/tests/gate-hooks-canary.sh §6.5–§6.7 | Tier ladder: classifier owns `computeTier()` (gate = `EXEC \|\| CONTRACT`; `N`/`GREEN`/`net-additive` de-escalate only) and emits `tier`/`tierReason`/`signals` under `--tier`; SKILL Step 4.5 READS them and must not re-derive any signal in prose; §6.5 asserts every signal in BOTH directions. `--green` absent ⇒ not-green (T0 unreachable). Deliberately NO blast-radius/FANOUT signal — one was built and deleted after measuring 9/9 T2 with word-mention counts (S54) | Tier arithmetic drifts back into prose → the S165/S256 failure returns (71% full-slate, 63% unannounced — BEFORE only; current figure is owned by evals/measure_review_tiers.py --canonical-only, never restated here); or a signal ships with only escalation cases and over-fires green | **+ MEDIA_EXT presence ⇒ T0 unreachable (2026-08-26 text-bodied-media bypass; `MEDIA` is its own signal, netAdditive stays truthful).** **+ 2026-08-27: a file's identity is the UNION of both `diff --git` sides — the b-side alone let `git mv deploy.sh notes.txt` score T0. `RENAME` ⇒ T0 unreachable (a rename deletes its source). A 1007xx/120000 file mode ⇒ code+exec (metadata, so it survives prose where a shebang test cannot). A json-family rename fails up (its inert verdict is hunk-derived, and a rename empties the hunk). §6.6–§6.7 assert each in both directions.**
+| `/review` | review/scripts/classify-diff.js `DATA_YAML_PATHS` / `DATA_JSON_PATHS` ↔ hooks/tests/gate-hooks-canary.sh §5 (↔ the owning repo's own validator, where one exists) | **Data allowlist.** Repo-relative PATH-anchored (never basename — S256) set of files that bypass the exec/injection nets. Ordering is load-bearing: `EXEC_KEY` runs BEFORE the allowlist, `SHELL_VALUE` after — the incidents (S256, kg S2) were all `SHELL_VALUE` on PROSE, and none justified exempting a hook key. **Admission bar: data BY CONSTRUCTION** — the schema must have no exec surface that can *grow*, enforced by a mechanism, not asserted in a comment (precedent: `graph-index.yaml` earned its entry only once `validate-graph.js` Check 8 + `lib/schema-keys.js` closed the key set, 2026-08-22). Every added path owes 3 paired canary cases: an `inert` fixture using REAL blocking-diff bytes; a `code` POSITIVE CONTROL holding the BASENAME FIXED and varying the DIRECTORY (a different-filename control cannot see a basename-anywhere regression — two mutants passed 135/135 against one, 2026-08-22); and a mutation-verify that empties the set and asserts inert→CODE | A wrong entry silently skips the review gate for that path in EVERY repo — the classifier has no repo identity (`check-review-gate.js` pipes the delta in with no `--repo`), so a root `graph-index.yaml` anywhere inherits it. Fails OPEN, the one direction the P11/P72 asymmetry forbids. Scope to `(repo, path)` pairs if the set ever exceeds ~5 entries or admits a name as generic as `data.json` |
+
+| `check-router-counts` ([redacted]) | `scripts/check-router-counts.sh:60-92` ↔ `[redacted]/CLAUDE.md:87` ↔ `~/.claude/CLAUDE.md:25,27` ↔ `[redacted]/docs/code-review-checklist.md:1` + its `- **vN.N` changelog bullets | Four literal prose forms must survive verbatim: ``` `docs/code-review-checklist.md` (**vN.N** ``` in the project router; ``` `learnings/` (N files) ``` and ``` PNN-*.md` (N narratives) ``` in the global router; and a `vN.N` on line 1 of the checklist. Backticks, parentheses and the `**` are load-bearing. Reads come from each repo's INDEX, so an unstaged edit reads as absent — by design. | A rephrase prints `UNPARSED … THIS CHECK is stale, not the router` (deliberately NOT the fix-the-router message). Added S230 after a 4-reviewer slate found the first version certified the wrong quantity; `scripts/check-router-counts.test.sh` is its positive control — 11 cases on throwaway fixtures, no live file touched. ⚠️ Note the cross-repo hazard: `~/.claude` is a separate repo edited from EVERY project, so this check can go red with no commit in the mobile repo. |
+| CLAUDE.md | `## Mistake Patterns` heading | `hooks/memory-size-gate.js`, `/review-plan`, `/prune-memory`, `/review`, `/extract-from-senior` locate the section BY NAME — renaming it silently breaks all five. (Moved out of CLAUDE.md 2026-08-25 under the size ratchet; it is maintainer metadata, and this table is where maintainer metadata belongs.) | Five consumers fail to find the section |
 
 **Implication for future audience-split work**: removing `Times` or `Last` columns, or renaming the "Mistake Patterns" / "Principles" sections, requires SIMULTANEOUS skill updates. See "Move 4 (deferred)" below.
+
+---
+
+## Research artifact template
+
+Externalized from `CLAUDE.md` 2026-08-25 (size ratchet). CLAUDE.md keeps the trigger and the
+path; the shape lives here because it is a template consulted while writing one, not a reflex
+that must fire on every session.
+
+`research/YYYY-MM-DD-topic.md` at project root, 100-200 lines.
+- **Frontmatter**: `date, commit, branch, topic, status`
+- **Sections**: Goal - Verdict (1 sentence) - per-question Answer + Evidence - Constraints
+  Discovered - Open Questions - Recommended Next Step
+- **Evidence minimums**: codebase >=2 `file:line`; external >=2 URLs + quotes; hybrid >=1 each
+- Documents what IS, not what SHOULD BE.
 
 ---
 
@@ -181,13 +203,55 @@ Every entry has three tiers. The shape is the filter; the constraints are mechan
 
 ### Compression governance verifier (2026-05-04)
 
-`~/.claude/skills/wrapping-session/verify_claude_md.py` enforces compression invariants at `/wrap` Step 7a:
-- File size cap (50 KB).
+`~/.claude/skills/wrapping-session/verify_claude_md.py` enforces compression invariants. It runs twice per wrap: a non-blocking early warning at Step 7a, and an **enforcing `--strict` gate at Step 8**, immediately before the `~/.claude` commit that ships `CLAUDE.md`. Invariants:
+- **Size ratchet** (`SIZE_RATCHET_BYTES`): the file may not GROW. To add a line, remove one. Lower it whenever the file shrinks. **Raise it only by recorded decision** (owner, 2026-09-08 — it is a budget that forces prioritisation, not a wall): an addition may raise the ratchet when it passes all three tests — (1) it must fire on every session, not on a trigger; (2) it cannot be a hook; (3) it cannot be a one-line trigger pointing at a skill, `governance.md`, or a rules file. Record the decision and the new number in the `SIZE_RATCHET_BYTES` comment. Everything failing a test goes to its proper home; that is what happened to all three 2026-09-08 additions. The 50 KB `SIZE_CAP_BYTES` is a softer target — above it WARNs, it does not block.
+- **Mistake-row ratchet** (`MISTAKE_ROW_MAX_VIOLATIONS`): the COUNT of rows over 250 chars may not increase. It is a count, not an identity set — retiring one oversized row and adding another passes. It is "no net-new oversized rows", not "no new oversized rows".
+- **Mistake rows ≤250 chars, unconditionally.** An archive pointer does NOT exempt a row (a pointer-exempt rule is unreachable for exactly the rows that need it, since every oversized row acquires one). Compress per the row template above: T1 + T2 inline, T3 to the archive — **append the narrative to the archive before trimming the row**; archives drift stale behind the rows pointing at them.
+- **Mistake rows must have exactly 4 columns.** A literal `|` in a cell must be escaped `\|`, even inside `` `code spans` `` (GFM requires it); an unescaped pipe silently truncates the measured cell.
 - Principles count budget (70).
 - Paragraph-principle externalization compliance (>600-char entries must have `→ Full case detail` pointer).
-- Mistake-table 1x rows ≤250 chars OR contain archive pointer.
+- A missing `## Mistake Patterns` or `## Principles` heading **fails closed** — a renamed heading must not silently disable the check.
 
-Default WARN mode (exit 0, stderr diagnostic) during adoption window. Upgrade to `--strict` after 3 consecutive clean wraps.
+**ENFORCING since 2026-07-09.** It previously sat in WARN mode (`|| true`, no `--strict`) pending "3 consecutive clean wraps" — an activation condition that required the backlog it existed to prevent to already be cleared, so it printed FAIL and exited 0 for 66 days. Any gate installed against an existing backlog needs a ratchet, or it never turns on. → `learnings/2026-07-09-claude-md-governor-dead-66-days.md`
+
+**Paired artifact (P51):** `~/.claude/hooks/memory-size-gate.js` is the write-time nudge for the same caps and must agree with the verifier. Change one, change both; a parity check is owed.
+
+### Compression requires independent substance-loss verification (2026-07-04, S44)
+
+No CLAUDE.md compression/rewrite ships without an INDEPENDENT adversarial verification pass (a reader who did not author the compression) checking: (1) every rule/trigger/pointer/count in the original exists in the new file OR a relocation ledger, (2) pointer integrity on disk, (3) skill-coupling contracts (§3), (4) fact-checks on any enforcement claims. Evidence: S44 round-1 draft passed ALL deterministic spine checks (headings, keyword presence, number sets) while silently dropping 9 complete items, detection criteria on ~15 principles, and 1 pointer — the maker's compression drifts toward coherence over fidelity at ~15-entry scale, and grep-able checks catch structure, not meaning. Verifier findings restored at +9KB. → `learnings/2026-07-04-S44-fable5-stack-audit-session.md`
+
+### Tool-routing rationale (relocated from CLAUDE.md)
+
+- **`claude-api` is routed away from PRICING on relevance, not cost.** The original reason was
+  token load (~40K). That is retired: the skill's load dropped ~200K→~25K in v2.1.221 when it
+  moved reference docs to on-demand. The routing still holds — that skill is for SDK code, and
+  pricing belongs on openrouter.ai / provider pages. Relocated here 2026-08-22 to pay the
+  CLAUDE.md size ratchet for the line's own expansion.
+- **The Chrome-extension MCP is routed away from browser testing** because it dead-ends on
+  "extension not connected". Use `agent-browser` or `/ce-test-browser` instead.
+
+### Core Disposition firing dates (relocated from CLAUDE.md)
+
+Relocated 2026-08-25 (S66) to pay the size ratchet for the subagent-delegation line in
+§ Environment. The inline counts stay in CLAUDE.md; only the `most recent` dates move here.
+
+| Disposition | Count at relocation | Most recent incident |
+|---|---|---|
+| P42 — Verify before asserting state | 102x | 2026-08-12 |
+| P72 — Checks must be falsifiable | 71x | 2026-08-12 |
+
+Update this table when either date advances; CLAUDE.md carries the count only.
+
+### Retired Command Discipline rules
+
+Historical metadata, relocated out of the always-loaded CLAUDE.md on 2026-08-22 to pay the
+size ratchet for the `/grill-me` Gates row. The rule numbers stay skipped — Rule numbering is
+stable because skills and learnings cross-reference it.
+
+| Rule | Retired | Why |
+|---|---|---|
+| Rule 2 | 2026-07-04 | Model-capability crutch — the behaviour it enforced is now default. |
+| Rule 4 | 2026-07-04 | Harness-enforced; the rule restated what a hook already blocks (P16). |
 
 ### Cross-references
 
@@ -195,3 +259,8 @@ Default WARN mode (exit 0, stderr diagnostic) during adoption window. Upgrade to
 - **Routing rationale**: `feedback_claude_md_compression_first_principles.md` (compression-vs-deletion debate; user direction 2026-04-22).
 - **Externalized principle T3 narratives**: `~/.claude/principles/P*.md`.
 - **Verifier**: `~/.claude/skills/wrapping-session/verify_claude_md.py`.
+
+## Model allocation — history (relocated from CLAUDE.md 2026-09-11, paying the size ratchet)
+
+Owner ruling 2026-09-09 supersedes the 2026-09-04 "default Opus" rule, which `settings.json` never matched. `advisorModel` stays `fable`: from an Opus/Sonnet subagent it is a real escalation; from the main session it is a fresh full-transcript read, kept for decision-vs-implementation drift. The rule itself lives in CLAUDE.md § Environment. **Superseded 2026-09-23** (owner): main → Opus 5.5, **advisor OFF**. The advisor removal in `74d5aca` (09-14) was DELIBERATE — owner disabled it because it fired on every small step and burned tokens (S76 misread it as drift and re-enabled it for a few hours; reverted same day). Background: Anthropic's guidance is Opus 5.5 first, Fable only if xhigh/max fall short, and Fable-main could only take a Fable advisor (advisor.md pairing rule), i.e. self-review.
+

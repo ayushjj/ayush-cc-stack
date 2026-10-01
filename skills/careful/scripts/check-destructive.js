@@ -1,6 +1,6 @@
 // PreToolUse hook: blocks destructive Bash commands when /careful mode is active.
 // Flag file: $TEMP/.claude-careful-mode (created by /careful skill, removed on deactivation)
-// Reads tool input from CLAUDE_TOOL_INPUT env var.
+// Tool command via hooks/lib/hook-input.js (the single fd-0 reader).
 // Blocks via exit code 2 + stderr message.
 
 const fs = require('fs');
@@ -13,8 +13,21 @@ if (!fs.existsSync(flagPath)) {
   process.exit(0);
 }
 
-const input = JSON.parse(process.env.CLAUDE_TOOL_INPUT || '{}');
-const command = input.command || '';
+// Reached only when /careful is ACTIVE. If the shared reader cannot load, an
+// uncaught throw would exit 1 — and exit 1 is not a block, so this guard would
+// fail OPEN exactly when the user asked to be protected. Fail CLOSED instead:
+// the escape is to deactivate careful mode.
+let command;
+try {
+  command = require('../../../hooks/lib/hook-input.js').readToolCommand();
+} catch (err) {
+  process.stderr.write(
+    'CAREFUL MODE BLOCKED: cannot load hooks/lib/hook-input.js, so this command ' +
+    'cannot be inspected. Blocking rather than guessing.\n' +
+    `  ${err.message}\n  To proceed, deactivate careful mode.\n`
+  );
+  process.exit(2);
+}
 
 const DESTRUCTIVE_PATTERNS = [
   { pattern: /\brm\s+(-[a-zA-Z]*f[a-zA-Z]*\s+|.*-rf\b)/, label: 'rm -rf / rm -f' },

@@ -1,6 +1,6 @@
 // PreToolUse hook: blocks Edit/Write/MultiEdit outside a frozen directory.
 // Flag file: $TEMP/.claude-freeze-dir (contains the allowed directory path)
-// Reads tool input from CLAUDE_TOOL_INPUT env var.
+// Tool input via hooks/lib/hook-input.js (the single fd-0 reader).
 // Blocks via exit code 2 + stderr message.
 
 const fs = require('fs');
@@ -18,8 +18,21 @@ if (!allowedDir) {
   process.exit(0);
 }
 
-const input = JSON.parse(process.env.CLAUDE_TOOL_INPUT || '{}');
-const filePath = input.file_path || '';
+// Reached only when /freeze is ACTIVE. An unloadable reader must not silently
+// disarm the boundary the user turned on (exit 1 is not a block). Fail CLOSED;
+// the escape is to deactivate freeze mode.
+let ti;
+try {
+  ti = require('../../../hooks/lib/hook-input.js').readToolInput();
+} catch (err) {
+  process.stderr.write(
+    'FREEZE MODE BLOCKED: cannot load hooks/lib/hook-input.js, so this write ' +
+    'cannot be inspected. Blocking rather than guessing.\n' +
+    `  ${err.message}\n  To proceed, deactivate freeze mode.\n`
+  );
+  process.exit(2);
+}
+const filePath = ti.file_path || ti.notebook_path || '';
 
 if (!filePath) {
   process.exit(0);

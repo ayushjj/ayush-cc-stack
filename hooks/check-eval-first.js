@@ -14,16 +14,28 @@
 
 const { execSync } = require('node:child_process');
 
-const input = JSON.parse(process.env.CLAUDE_TOOL_INPUT || '{}');
-const command = input.command || '';
+// Always-on guard: fail open (loudly) if the shared reader cannot load, rather than
+// blocking every commit. The opt-in safety guards (/careful, /freeze) fail closed.
+let command;
+let hookLib;
+try {
+  hookLib = require('./lib/hook-input.js');
+  command = hookLib.readToolCommand();
+} catch (err) {
+  process.stderr.write(`eval-first guard DISABLED: ${err.message}\n`);
+  process.exit(0);
+}
 
 // Only gate git commit commands
 if (!/\bgit\s+commit\b/.test(command)) {
   process.exit(0);
 }
 
-// Allow skipping for projects that genuinely don't need tests
-if (process.env.CLAUDE_EVAL_FIRST_SKIP === '1') {
+// Allow skipping for projects that genuinely don't need tests. Honoured from an
+// inline `VAR=1 git commit ...` prefix as well as from the environment — env-only
+// was unreachable for an agent, since a PreToolUse hook is a separate process and
+// never sees the command's own assignment prefix.
+if (hookLib.bypassed('CLAUDE_EVAL_FIRST_SKIP', command, { appliesTo: ['git'] })) {
   process.exit(0);
 }
 
@@ -57,17 +69,29 @@ if (!hasSourceCode) {
 }
 
 // Check if any test files exist anywhere in the project.
-// NOTE: globs are anchored to extension or directory to avoid false matches.
-// The previous loose globs `*test_*` / `*_test.*` matched any path with the
-// substring `test_` — e.g. Rails view templates like `_latest_enquiries.html.erb`
-// (`latest_e` contains `test_e`). That silently passed eval-first in any project
-// with such files. Tighter patterns below.
+//
+// Anchored to test-file NAMES, never to directory names (fixed /hook-review 2026-08-21).
+// The previous list carried `"tests/*" "test/*" "spec/*"` and their `*/` forms, which match
+// ANY tracked file under a test-shaped directory. A repo holding `tests/README.md` and zero
+// real tests therefore committed source code silently — the guard failed OPEN, which is
+// indistinguishable from "this project has evals". Reproduced, then closed, by canary.
+//
+// The earlier defect this replaces is kept as a warning: the original loose globs `*test_*`
+// / `*_test.*` matched any path CONTAINING the substring, so Rails view templates like
+// `_latest_enquiries.html.erb` (`latest_e` contains `test_e`) passed the gate.
+//
+// Measured before changing: across 16 local repos this list produces an IDENTICAL
+// warn/silent verdict to the old one — it drops only redundant matches ([redacted]
+// 662 -> 512 matched files, still silent on 477 real specs). `__tests__/*` is kept as a
+// directory glob because that directory name is itself the Jest test convention.
 const testFileSearch = tryExec(
   'git ls-files ' +
     '"*.test.*" "*.spec.*" ' +
     '"**/test_*.py" "**/test_*.rb" "**/test_*.ts" "**/test_*.js" ' +
     '"**/*_test.py" "**/*_test.go" "**/*_test.rb" "**/*_test.ts" "**/*_test.js" ' +
-    '"tests/*" "test/*" "__tests__/*" "spec/*"'
+    '"**/*_spec.rb" "**/*_spec.py" "**/*_spec.ts" "**/*_spec.js" ' +
+    '"**/*-canary.sh" "**/*_test.sh" "**/*-test.sh" ' +
+    '"__tests__/*" "*/__tests__/*"'
 );
 
 if (testFileSearch) {

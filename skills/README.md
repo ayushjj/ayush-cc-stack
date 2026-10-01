@@ -1,50 +1,43 @@
 # Skills
 
-26 named procedures, invoked via `/<slug>` in a Claude Code session. The agent reads the skill's `SKILL.md` and executes the procedure inside the same conversation.
-
-## Firing cadence
-
-Skills group into classes by firing rate. Class determines smoke-test method whenever a skill is refactored — always-fires skills smoke-test in the next session; quarterly skills need a manual dry-run.
-
-| Class | Skills |
-|---|---|
-| **Always-fires** (per-session) | `catchup`, `wrapping-session` |
-| **Common** (multi-per-week) | `review`, `review-plan`, `freeze`, `careful` |
-| **On-demand** (situation-triggered) | `premise-check`, `creating-specifications`, `investigating-problems`, `researching-before-planning`, `validating-queries`, `auditing-data`, `executing-batch-operations`, `audit-project`, `data-analysis`, `prompt-engineering`, `extract-from-senior`, `grill-me` |
-| **Knowledge-graph satellites** | `learn`, `learn-book`, `scout`, `connect`, `level-up` |
-| **Low** (quarterly+) | `prune-memory`, `hook-review` |
-| **Pipeline utility** | `telemetry` |
+30 named procedures, invoked via `/<slug>` in a Claude Code session. The agent reads the skill's `SKILL.md` and executes the procedure inside the same conversation.
 
 ## One line per skill
+
+`*` = vendored from [mattpocock/skills](https://github.com/mattpocock/skills) (MIT) — see `../THIRD_PARTY_NOTICES.md`.
 
 | Slug | Purpose |
 |---|---|
 | `catchup` | Cold-start orientation: recent commits, registry entry, plan, linked learning |
-| `wrapping-session` | End-of-session: update MEMORY.md, capture learnings, run check command, commit + push |
+| `wrapping-session` | End-of-session: update memory, capture learnings, commit + push |
 | `premise-check` | "Should we build this at all?" before any spec or plan |
-| `researching-before-planning` | Codebase + external research artifact before entering plan mode |
 | `creating-specifications` | Multi-session design doc (design + decisions + implementation triad) |
+| `grill-me`* | Interview the user branch-by-branch to resolve every open decision in a plan |
 | `review-plan` | Self-adversarial review of a plan before `ExitPlanMode` |
-| `review` | Multi-agent parallel review of the staged diff before commit |
-| `investigating-problems` | Logs-first, hypothesis-driven debug protocol |
+| `review` | Type checks + a right-sized slate of parallel review agents before commit |
+| `code-review`* | Review changes since a fixed point against repo standards and the originating spec |
+| `tdd`* | Red-green-refactor, test-first |
+| `harden` | Prove a check can FAIL by mutating what it guards |
+| `diagnosing-bugs`* | Diagnosis loop for hard bugs and performance regressions |
+| `resolving-merge-conflicts`* | Resolve an in-progress merge/rebase conflict |
+| `codebase-design`* | Shared vocabulary for designing deep modules |
+| `domain-modeling`* | Build and sharpen a project's domain model (CONTEXT.md, ADRs) |
+| `research`* | Investigate against primary sources; capture findings as Markdown |
+| `executing-batch-operations` | Dry-run → sample → execute → verify protocol for bulk data work |
+| `autonomous-batch` | Run a queue of N similar tasks through fresh-context subagents end-to-end |
 | `freeze` | Block edits outside a specific directory during scoped debugging |
 | `careful` | Block destructive Bash commands (`rm -rf`, `DROP TABLE`, force push, etc.) |
-| `prune-memory` | Quarterly archive of stale mistake-table rows and MEMORY.md entries |
-| `hook-review` | Fortnightly audit of hook firing rates and coverage gaps |
-| `learn` | Extract insights from a URL / article / tweet into the knowledge graph |
-| `learn-book` | Multi-pass extraction from a PDF or book |
-| `level-up` | Weekly scout of Claude Code + Anthropic release notes + community sources |
-| `scout` | Dated topic report into `scout-reports/` |
-| `connect` | Find back-links between knowledge-graph insights |
+| `git-guardrails-claude-code`* | Install hooks that block dangerous git commands |
+| `setup-pre-commit`* | Husky + lint-staged + type check + tests pre-commit setup |
 | `prompt-engineering` | Structure and tune LLM prompts using battle-tested patterns |
-| `data-analysis` | Quantified analysis of user data BEFORE proposing solutions |
-| `telemetry` | Per-session metrics log (skills used, duration, files changed) |
-| `audit-project` | Universal-by-construction completeness audit against a 9-dimension checklist |
-| `auditing-data` | Orphan / duplicate / business-rule integrity sweep after batch operations |
-| `executing-batch-operations` | Dry-run → sample → execute → verify protocol for bulk DB work |
-| `validating-queries` | Run test queries against real data before declaring done |
-| `extract-from-senior` | Source-fidelity pass when synthesizing external content (guards principle P42) |
-| `grill-me` | Anti-sycophancy: actively challenge a decision rather than accept it |
+| `learn` | Extract insights from a URL / article / book into a knowledge graph |
+| `level-up` | Weekly scout of Claude Code + Anthropic release notes |
+| `scout` | Compare bookmarked workflow tips against your setup; dated gap report |
+| `prune-memory` | Archive stale mistake-table rows and memory entries (move, never delete) |
+| `hook-review` | Audit hooks for correctness, false-positive rate, harness compatibility |
+| `skill-audit` | Detect project-specific tokens leaking into skills and hooks |
+| `telemetry` | How often each skill runs, and which mechanism fired it |
+| `publish-stack` | Prepare this public snapshot: copy, renumber, sanitize, leak-gate |
 
 ## Install
 
@@ -54,12 +47,12 @@ Invoke a skill by typing `/<slug>` in a Claude Code session. The agent will also
 
 ## Universal-by-construction
 
-Per principle `P10-skills-universal-by-construction.md`, every skill in this directory must work for any project. Project-grounded incidents — the failure that motivated the skill, the worked example with real names — do NOT belong in `SKILL.md`. They belong in `learnings/`. The skill describes shape; the learning preserves story.
+Per principle `P17-skills-universal-by-construction.md`, every skill in this directory must work for any project. Project-grounded incidents — the failure that motivated the skill, the worked example with real names — do NOT belong in `SKILL.md`. They belong in `learnings/`. The skill describes shape; the learning preserves story.
 
 Adopt-and-adapt: a skill that has been adapted to add a project-specific code path is fine, but the adaptation belongs in a project-scoped overlay (`.claude/skills/<slug>/` at the project root), not in the global skill at `~/.claude/skills/<slug>/`. The global one stays universal so it works in every project.
 
 ## What's NOT in here (and why)
 
-Three skills from the private OS are intentionally omitted (the top-level `README.md` § What's NOT in here names them and the rationale): `ingest`, `finding-techdebt`, and the private `skill-audit` skill (maintainer-only — the cross-project version is `/audit-project`).
+Some skills from the private OS are intentionally omitted — the top-level `README.md` § What's NOT in here gives the rationale.
 
-If you need a skill that does not exist in this stack, write it as a one-page `SKILL.md` and drop it into the directory. The frontmatter pattern is consistent across the 26 skills here; copy any one as a template.
+If you need a skill that does not exist in this stack, write it as a one-page `SKILL.md` and drop it into the directory. The frontmatter pattern is consistent across the skills here; copy any one as a template.

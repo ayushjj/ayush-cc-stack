@@ -37,8 +37,17 @@ const { execFileSync } = require('node:child_process');
 try {
   if (process.env.CLAUDE_WRAP_COLLISION_SKIP === '1') process.exit(0);
 
-  const input = JSON.parse(process.env.CLAUDE_TOOL_INPUT || '{}');
-  const command = (input.command || '').trim();
+  // NOT migrated to lib/hook-input.js. `process.stdin.isTTY` flips fd 0 to
+  // O_NONBLOCK and the read below silently fails open on a slow first byte. That is
+  // harmless HERE only because every path in this file exits 0 (warn-only).
+  // Do NOT copy this idiom into a hook that blocks, and if you give this file an
+  // exit(2) path, migrate it to lib/hook-input.js first.
+  let raw = '';
+  try { if (!process.stdin.isTTY) raw = fs.readFileSync(0, 'utf8'); } catch {}
+  if (!raw.trim() && process.env.CLAUDE_TOOL_INPUT) raw = process.env.CLAUDE_TOOL_INPUT;
+  let input = {};
+  try { input = raw.trim() ? JSON.parse(raw) : {}; } catch {}
+  const command = ((input.tool_input && input.tool_input.command) || input.command || '').trim();
   if (!command) process.exit(0);
 
   // (1) Is this a git add / git commit?
@@ -81,8 +90,9 @@ try {
     `${shortId(owner.sessionId)} (pid ${owner.pid}) holds the git-sync lock.\n` +
     `   The wrap mutex should have serialized this — its absence means the lock ` +
     `was bypassed or timed out (fail-open). Expect possible commit scatter.\n` +
-    `   Safe move: wait for the other wrap to finish, or stage explicitly ` +
-    `(never \`git add -A\`) and verify your commit afterward.\n` +
+    `   Safe move: wait for the other wrap to finish, or stage via the session ` +
+    `manifest (session-manifest.js stage; NEVER \`git add -A\`) and commit with ` +
+    `--pathspec-from-file so a polluted index can't leak in.\n` +
     `   Lock: ${LOCK_DIR}   Silence: CLAUDE_WRAP_COLLISION_SKIP=1\n` +
     `══════════════════════════════════════════\n`
   );

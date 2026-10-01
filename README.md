@@ -25,10 +25,11 @@ ayush-cc-stack/
 ├── statusline.sh              statusline renderer
 ├── MEMORY.md.template         per-project memory template
 ├── LICENSE                    MIT
+├── THIRD_PARTY_NOTICES.md     credit + licence for vendored skills
 ├── .gitignore                 excludes runtime state (settings.local.json, projects/, sessions/, etc.)
-├── principles/                10 externalized full-case-study principles (P01–P10)
-├── hooks/                     7 standalone hooks
-├── skills/                    26 skills
+├── principles/                22 externalized full-case-study principles (P01–P22) + INDEX.md
+├── hooks/                     14 hooks + their canary tests
+├── skills/                    30 skills (10 vendored — see THIRD_PARTY_NOTICES.md)
 └── learnings/                 4 sanitized case studies + curation README
 ```
 
@@ -49,16 +50,16 @@ The cycle does not always run end-to-end. A bug fix lands on the build-verify-co
 | Phase | Question | Primary skill | Defense |
 |---|---|---|---|
 | premise | Should we build this at all? | `/premise-check` | conversational |
-| research | What do I need to know first? | `/researching-before-planning`, `/learn`, `/learn-book`, `/scout`, `/connect`, `/level-up` | knowledge-graph integrity gates |
+| research | What do I need to know first? | `/research`, `/learn`, `/scout`, `/level-up` | knowledge-graph integrity gates |
 | plan | What is the smallest change that ships the value? | plan mode + `/creating-specifications` | Rule 0 (classify-before-acting) |
 | review | Would this plan survive contact with reality? | `/review-plan` | Rule 8 (`/review-plan` before ExitPlanMode) |
 | build | Does the code do what the plan says? | (no skill — Claude writes) | `/careful` + `/freeze`; commit-time hooks below |
-| verify | Does it pass on real data? | `/validating-queries`, `/auditing-data` | Rule 1 (baseline first), Rule 7 (evaluate before scaling) |
+| verify | Does it pass on real data? | `/tdd`, `/harden`, `/executing-batch-operations` | Rule 1 (baseline first), Rule 7 (evaluate before scaling) |
 | commit | Is the diff actually what I think it is? | `/review` | review-gate hook + anticheat hook + eval-first hook |
 | wrap | What does next session need to know? | `/wrapping-session` | `context-wrap-trigger` at 35/45/60% |
 | catchup | What did last session leave for me? | `/catchup` | MEMORY.md + CLAUDE.md auto-load |
 
-Two perpendicular paths cut across the cycle: **debug** when something is unexpectedly broken (routes through `/investigating-problems` — logs first, code second), and **data-first** when a feature touches user behavior (quantified `/data-analysis` before any plan is written).
+Two perpendicular paths cut across the cycle: **debug** when something is unexpectedly broken (routes through `/diagnosing-bugs` — logs first, code second), and **data-first** when a feature touches user behavior (quantify real data before any plan is written — CLAUDE.md § Data-first design).
 
 A few skills sit outside the cycle entirely — they exist to keep the OS itself healthy: `/prune-memory` and `/hook-review` and `/skill-audit` run on calendars, not as steps in a feature cycle. See the maintenance section below.
 
@@ -150,7 +151,7 @@ If you find a sharper version of any skill or hook, send the diff. That is the c
 
 ## What's NOT in here (and why)
 
-**Omitted skills.** Three sit in the private OS but are not published: `ingest` (zero firing evidence + redundant with `/learn` direct invocation), `finding-techdebt` (weak firing + redundant with `/review` simplicity pass), and a handful of project-grounded experiments whose utility cannot be conveyed without dataset-specific context. The audit found their cross-project value did not justify the per-file sanitization cost.
+**Omitted skills.** Several sit in the private OS but are not published: personal writing/content skills, data-pipeline skills tightly bound to one codebase, and a handful of project-grounded experiments whose utility cannot be conveyed without dataset-specific context. The audit found their cross-project value did not justify the per-file sanitization cost.
 
 **Private files.** `settings.local.json` (per-machine overrides), `projects/` and `sessions/` (per-project runtime state), `history.jsonl` and the various caches, the full `learnings/` archive (the shipped subset is 4 sanitized case studies that map to public principles).
 
@@ -167,7 +168,7 @@ If you adopt this and want it to keep working over time:
 - **Capture mistakes inline; do not batch.** When a non-obvious lesson surfaces, write it into the mistake table the moment it emerges. Context compaction is silent and irreversible — inline capture is the only defense.
 - **Run `/prune-memory` quarterly.** Stale rows compound; loaded context is paid every session. The skill moves rows to archive rather than deleting them, so provenance survives.
 - **Run `/hook-review` fortnightly.** Hooks that have not fired in N sessions are candidates for tightening or removal. Hooks misfiring are candidates for a broader matcher.
-- **Run `/skill-audit` quarterly** (aligned with `/prune-memory`). Skills and hooks are universal-by-construction (principle P10). Audit detects drift back into project-grounded language and routes the incident to a learning rather than into the skill itself.
+- **Run `/skill-audit` quarterly** (aligned with `/prune-memory`). Skills and hooks are universal-by-construction (principle P17). Audit detects drift back into project-grounded language and routes the incident to a learning rather than into the skill itself.
 - **Do not trust yourself to maintain by remembering.** Schedule it. Governance you do not automate is not governance.
 
 The maintenance skills above are deliberately minimal. They are what keeps the surface honest as the OS evolves; they are also the first thing that breaks if you adopt the stack but skip the calendar.

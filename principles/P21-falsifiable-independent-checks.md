@@ -1,0 +1,9 @@
+# P21 (private P72) — A verification/gate check must be FALSIFIABLE
+
+> Externalized 2026-07-04 (S44 Fable-5 audit). CLAUDE.md retains the inline T1 trigger + T2 rule; this file preserves the full pre-audit principle text verbatim (including the S193 recurrence).
+
+**Applies to**: any self-authored verification gate, reconciliation check, or cross-check whose two sides might derive from the same predicate/definition.
+
+## Full text (verbatim from CLAUDE.md as of 2026-07-04)
+
+> **A verification/gate check must be FALSIFIABLE — derive its two sides from INDEPENDENT sources.** A check comparing two values both derived from the same predicate/definition is a tautology that can never fail (e.g. `active == base − excluded` when the filtered set is DEFINED by that exact predicate). Detection: can you construct an input that makes the check FAIL? If no, it verifies nothing — recompute one side from a source UPSTREAM of the thing under test (raw table, not the derived view's own flags). Sibling to the negative-assertion-passes-via-unrelated-crash mistake-row (that's a check passing for the wrong reason; this is a check that cannot fail at all). Caught by `/review` on a self-authored reconciliation gate (S191 [redacted]). **S193 RECURRENCE (authored P72 in S191, violated it in S193):** labelled a backtest grain cross-check "the independent P72 validator"; reviewer proved both sides algebraically equivalent → coherence guard, not independent. Lesson: authoring the principle does NOT inoculate (the "I know this trap" confidence is the anesthetic, P40); the genuinely-independent check often already exists — find it, don't relabel theatre onto the tautology, and don't ADD a "looks-independent" check reusing the same predicate. → `~/.claude/projects/-Users-<you>[redacted]/...` see project `learnings/2026-06-21-session193-rung1-backtest.md`.

@@ -12,6 +12,10 @@
 [How does the system work today?]
 
 ## Proposed Solution
+
+### What Already Exists
+[What existing code, flows, or patterns already solve part of this problem? Cite specific files/functions. If greenfield, state "N/A — greenfield, no existing code."]
+
 [High-level approach]
 
 ### Key Changes
@@ -31,10 +35,11 @@
 - Cons: [drawbacks]
 - Why rejected: [reason]
 
-## Success Metrics
-- [ ] [Measurable outcome 1]
-- [ ] [Measurable outcome 2]
-- [ ] [Measurable outcome 3]
+## Success Metrics (Test Expectations)
+Write as plain-language "when/then" statements — these become the test queue.
+- [ ] When [action], then [expected outcome]
+- [ ] When [action], then [expected outcome]
+- [ ] When [action], then [expected outcome]
 
 ## Risks
 - [Risk 1]: [Mitigation]
@@ -76,25 +81,33 @@
 
 ## Status: [Not Started | In Progress | Complete]
 
+## Test Queue (Beck's plan.md)
+Ordered list of test expectations from design.md Success Metrics. Implement ONE at a time — write failing test, write minimum code to pass, then next.
+- [ ] [Test expectation 1 — copied from Success Metrics]
+- [ ] [Test expectation 2]
+- [ ] [Test expectation 3]
+
 ## Execution Log
 
-### Session N - [Date]
+### Session 1 - [Date]
 - [x] [What was done]
 - [x] [What was done]
 - [ ] [What remains]
 
-### Session N+1 - [Date]
+### Session 2 - [Date]
 - ...
 
-## Files Changed
-- `path/to/file.ts:123` - [what and why]
-- `path/to/file.ts:456` - [what and why]
+## Files to Change
+- `path/to/file.ts` - [what and why]        (planned)
+- `path/to/file.ts:123` - [what and why]     (changed — add `:line` refs as work lands)
 
 ## Verification
-- [ ] Dry-run completed
-- [ ] Sample reviewed
-- [ ] Full execution done
-- [ ] Audit passed
+- [ ] Dry-run completed (if batch operation)
+- [ ] Sample reviewed (if batch operation)
+- [ ] Full execution done (if batch operation)
+- [ ] Tests written and passing (if code change)
+- [ ] Manual verification done
+- [ ] Audit passed (if data change)
 
 ## Learnings
 - [What worked well]

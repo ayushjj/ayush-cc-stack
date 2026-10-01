@@ -1,11 +1,18 @@
 #!/usr/bin/env node
-// PreToolUse hook: when Skill tool is invoked with a name that doesn't match
-// any installed skill slug, block with a "did you mean" list. Catches P2 (3x):
-// invoking with CLAUDE.md shorthand (`/wrap`) instead of slug (`wrapping-session`).
+// PreToolUse hook: when Skill tool is invoked with a name that fuzzy-matches
+// an installed skill slug WITHOUT equaling one, block with a "did you mean"
+// list. Catches P2 (3x): invoking with CLAUDE.md shorthand (`/wrap`) instead
+// of slug (`wrapping-session`).
 //
-// The harness already errors with "Unknown skill:" — this hook augments the
-// rejection with the actual list of installed slugs so Claude self-corrects
-// in one turn instead of guessing.
+// The harness already errors with "Unknown skill:" — this hook only augments
+// that rejection with the actual list of installed slugs so Claude
+// self-corrects in one turn instead of guessing. Because the harness is the
+// real judge, this hook BLOCKS ONLY on positive shorthand evidence (a fuzzy
+// suggestion exists). Unrecognized names with NO resemblance to anything
+// installed pass through (S256): harness BUILT-IN skills (verify, code-review,
+// fewer-permission-prompts, loop, …) live inside the CLI, not on disk, so they
+// are invisible to this enumeration — blocking them was a false positive, and
+// enumerating them here would be a P58 static set drifting every CLI release.
 //
 // Skip:      CLAUDE_SKILL_SLUG_SKIP=1
 // Warn-only: CLAUDE_SKILL_SLUG_WARN_ONLY=1
@@ -17,9 +24,19 @@ if (process.env.CLAUDE_SKILL_SLUG_SKIP === '1') {
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
+const tty = require('node:tty');
 
-const input = JSON.parse(process.env.CLAUDE_TOOL_INPUT || '{}');
-const requested = (input.skill || '').trim();
+// Tool input arrives as JSON on stdin (hook contract, verified 2026-07-04);
+// legacy CLAUDE_TOOL_INPUT env retained only as fallback — the env-only read
+// left this gate silently dead until S46.
+let raw = '';
+// tty.isatty(0), not process.stdin.isTTY — the latter flips fd 0 O_NONBLOCK
+// and readFileSync(0) EAGAINs on slow pipes (the S167 classify-diff bug).
+try { if (!tty.isatty(0)) raw = fs.readFileSync(0, 'utf8'); } catch {}
+if (!raw.trim() && process.env.CLAUDE_TOOL_INPUT) raw = process.env.CLAUDE_TOOL_INPUT;
+let input = {};
+try { input = raw.trim() ? JSON.parse(raw) : {}; } catch {}
+const requested = ((input.tool_input && input.tool_input.skill) || input.skill || '').trim();
 
 if (!requested) {
   process.exit(0);
@@ -34,6 +51,7 @@ function listSkills(dir) {
     return fs.readdirSync(dir, { withFileTypes: true })
       .filter(e => e.isDirectory())
       .map(e => e.name)
+      .filter(name => !name.startsWith('.archived-')) // retired skills: block with did-you-mean, not resolve
       .filter(name => fs.existsSync(path.join(dir, name, 'SKILL.md')));
   } catch {
     return [];
@@ -93,16 +111,10 @@ if (allSkills.includes(requestedSlug)) {
   process.exit(0);
 }
 
-// Compute fuzzy suggestions: substring matches + Levenshtein-1-like edits.
-function similar(a, b) {
-  a = a.toLowerCase();
-  b = b.toLowerCase();
-  if (a === b) return true;
-  if (a.includes(b) || b.includes(a)) return true;
-  // Quick Levenshtein-1 approximation: same length ±1, ≤1 char diff
+// ≤2-edit approximation with length delta ≤2 (two-pointer; not true Levenshtein).
+function nearEdit(a, b) {
   if (Math.abs(a.length - b.length) > 2) return false;
   let diffs = 0;
-  const maxLen = Math.max(a.length, b.length);
   for (let i = 0, j = 0; i < a.length && j < b.length; ) {
     if (a[i] === b[j]) { i++; j++; continue; }
     diffs++;
@@ -114,9 +126,29 @@ function similar(a, b) {
   return diffs <= 2;
 }
 
-const suggestions = allSkills
-  .filter(s => similar(s, requestedClean))
-  .slice(0, 5);
+// Blockable evidence = shorthand or typo, DIRECTION-AWARE (S256, 2nd pass):
+//  - requested is a FRAGMENT of an installed slug (`wrap` ⊂ `wrapping-session`) — P2 shorthand
+//  - requested is within ~2 edits of an installed slug (`catchp` → `catchup`) — typo
+//  - requested EXTENDS an installed slug (`code-review` ⊃ `review`) — NOT blockable:
+//    that's the shape of a harness built-in, which lives in the CLI and is invisible
+//    here. The first fail-open pass freed only zero-resemblance names and still
+//    hard-blocked `code-review`; the harness errors on its own for real unknowns.
+//    Matched against the post-namespace slug, not the full plugin-prefixed string.
+const suggestions = allSkills.filter(s => {
+  const inst = s.toLowerCase(), req = requestedSlug.toLowerCase();
+  if (inst === req) return false;
+  // PREFIX, not substring: P2 shorthand is abbreviation-shaped (`wrap` →
+  // `wrapping-session`). A substring rule re-blocked built-in `code-review`
+  // via installed `ce-code-review` (caught by the canary's extension case).
+  if (inst.startsWith(req)) return true;
+  if (req.includes(inst)) return false;
+  return nearEdit(inst, req);
+}).slice(0, 5);
+
+// No shorthand/typo evidence → fail OPEN; the harness is the real judge.
+if (suggestions.length === 0) {
+  process.exit(0);
+}
 
 const msg = [
   '════════════════════════════════════════════════════════════════',
@@ -125,35 +157,13 @@ const msg = [
   '   CLAUDE.md often uses shorthand (e.g. `/wrap`) but the Skill tool',
   '   needs the actual installed slug (e.g. `wrapping-session`).',
   '',
-];
-
-if (suggestions.length > 0) {
-  msg.push('   Did you mean:');
-  for (const s of suggestions) msg.push(`     - ${s}`);
-  msg.push('');
-}
-
-msg.push(
-  `   Installed user skills (${userSkills.length}):`,
-  '     ' + (userSkills.slice(0, 12).join(', ') || '(none)'),
-  ...(userSkills.length > 12 ? [`     ... and ${userSkills.length - 12} more`] : []),
-);
-
-if (pluginSkills.length > 0) {
-  msg.push(
-    '',
-    `   Plugin skills (${pluginSkills.length}, namespaced as plugin:slug):`,
-    '     ' + pluginSkills.slice(0, 6).join(', '),
-    ...(pluginSkills.length > 6 ? [`     ... and ${pluginSkills.length - 6} more`] : []),
-  );
-}
-
-msg.push(
+  '   Did you mean:',
+  ...suggestions.map(s => `     - ${s}`),
   '',
   '   Skip this hook: CLAUDE_SKILL_SLUG_SKIP=1',
   '   Warn-only:     CLAUDE_SKILL_SLUG_WARN_ONLY=1',
   '════════════════════════════════════════════════════════════════',
-);
+];
 
 process.stderr.write(msg.join('\n') + '\n');
 
