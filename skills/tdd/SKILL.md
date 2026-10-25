@@ -1,6 +1,8 @@
 ---
 name: tdd
-description: Test-driven development. Use when the user wants to build features or fix bugs test-first, mentions "red-green-refactor", or wants integration tests.
+description: Test-driven development — the route for core-logic implementation (CLAUDE.md Rule 6, one test + minimum code per "go"). Use when implementing core logic or a plan task whose expectations are in plan.md, when the user wants to build features or fix bugs test-first, mentions "red-green-refactor", or wants integration tests.
+effort: high
+# Vendored 2026-10-04 from mattpocock/skills (~/.agents/skills/tdd) so effort: high survives skill updates. Re-sync by hand.
 ---
 
 # Test-Driven Development
@@ -35,4 +37,4 @@ When the shape of that interface is itself in question (how deep the module is, 
 
 - **Red before green.** Write the failing test first, then only enough code to pass it. Don't anticipate future tests or add speculative features.
 - **One slice at a time.** One seam, one test, one minimal implementation per cycle.
-- **Refactoring is not part of the loop.** It belongs to the review stage (see the `code-review` skill), not the red → green implementation cycle.
+- **Refactoring is not part of the loop.** It belongs to the review stage (see the `review` skill), not the red → green implementation cycle.

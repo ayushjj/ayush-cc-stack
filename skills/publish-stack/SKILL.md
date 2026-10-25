@@ -1,4 +1,5 @@
 ---
+disable-model-invocation: true
 name: publish-stack
 description: Prepare a fresh, anonymized snapshot of this ~/.claude OS for the public stack repo — copy the curated subset, renumber principles, run a self-testing leak safety-net — then hand off to the user's personal pre-publish sweep. NEVER commits, pushes, or runs the final sweep itself. Triggers on '/publish-stack', 'refresh the public stack', 'prepare the quarterly snapshot', 'publish my cc stack'.
 user_invocable: true

@@ -144,8 +144,13 @@ git -C "$E2E" add -A 2>/dev/null
 # Feed a PreToolUse payload and report the hook's exit code.
 hook_exit() { # $1=hook path  $2=command string
   printf '{"tool_name":"Bash","tool_input":{"command":%s}}' "$(node -e 'process.stdout.write(JSON.stringify(process.argv[1]))' "$2")" \
-    | node "$1" >/dev/null 2>&1; echo $?
+    | env -u CLAUDE_D_ENTRY_TIMING_WARN_ONLY node "$1" >/dev/null 2>&1; echo $?
 }
+# env -u: settings.json:6 sets CLAUDE_D_ENTRY_TIMING_WARN_ONLY=1 for every live session (S81,
+# owner-approved, b244f70), and this script inherits it — so without the unset the hook is in
+# warn mode, nothing can exit 2, and the control + heredoc cases fail for an env reason, not a
+# wiring one (hook-review 2026-10-15). Same unset as d-entry-timing-canary.sh:17. Warn mode
+# itself is asserted there (WARN_ONLY=1 allows + warning reaches the model).
 H="$HOOKS/check-d-entry-timing.js"
 ctl="git -C $E2E commit -m probe"
 [ "$(hook_exit "$H" "$ctl")" = "2" ] \

@@ -15,31 +15,40 @@ Hooks layered on `~/.claude/settings.json` shape Claude's behavior silently — 
 
 **Every 2 weeks.** Not weekly (overkill — hooks themselves don't change session-to-session), not monthly (too slow given Claude Code releases 5x/week).
 
-Last review: **2026-10-01** — 2 days late. Inventory clean (16 registered; `git-sync-lock.js`
-unregistered by design). All 9 suites green: false-positive 67/0, gate-hooks 355/0, hook-liveness 31/0,
-read-size 71/0, session-manifest 63/0, wrap-mutex ALL GREEN; alignment, d-entry, override-reachability exit 0.
+Last review: **2026-10-15** — on time. Inventory clean (17 registered; `check-skill-slug.js`
+unregistered on purpose in b244f70, `git-sync-lock.js` is a CLI). Baseline had 2 red suites, and both
+were stale tests, not broken hooks: override-reachability §9 inherited `CLAUDE_D_ENTRY_TIMING_WARN_ONLY=1`
+from settings.json:6 (fix: `env -u`), and session-manifest still tested the inline push warn that b244f70
+removed. All 11 suites + check-subagent-restore.test.sh are green after fixes. Read each suite's `RESULT:`
+line for its count.
 
-⚠️ `timeout` does not exist on macOS: wrapping suites in it returned exit 127 for all nine, which reads
-as "every suite broken". Run suites bare.
+**Fixed this review (red → green, mutant proven):**
+- `scanGitSegments` drops shell redirections, so `git add -A 2>/dev/null && git commit` no longer blinds
+  the D-entry gate (d-entry §16). The S84 push-only copy of that rule was moved into it.
+- `check-subagent-restore`: `stripQuotedRegions` blanks everything from the first `<<` to the end of the
+  command, which made the guard FAIL-OPEN for `bash <<EOF`, `cat <<EOF | sh`, and any command after a
+  heredoc. It also blocked report prose (11 of 40 live fires). It now blanks only heredoc bodies that are
+  data, and treats escaped backticks as literal. Replay of the live fires: 11 prose fires pass, 30 real ones block.
+- The ~/.claude push exemption (owner, 10-10) is now tested with a sibling-repo control.
+- `allow_large` is pinned as NOT exempting the read-size gate (4n). The one live case was a true positive.
 
-**Step 3: 174 fires / 1412 transcripts (09-17 → 10-01), control OK, every fire mapped to its trigger.**
-P3 tunes landed (09-15/16): `check-read-size` 99% → **0% FP, CLEAN** · `check-cd-persistence` subagent fires
-39 → 0 but still **73% FP → TUNE** (relative cd after absolute cd; export-prefixed vars; heredoc bodies — hit
-live twice this review) · `check-anticheat` **75% FP → TUNE** (9 overrides in one repo since 09-16) ·
-`check-eval-first` **2/2 FP → TUNE** (test discovery is cwd-relative) · `check-review-gate` **~10% FP → TUNE
-small** (chained cd → wrong repo; stacked skip prefixes; 26% of fires are flag-write + commit in one call).
-New: every hook `timeout` in settings.json is in SECONDS but set as if milliseconds (3000 = 50 min).
-Step 3.5: Bash:Agent **15.4:1** since 08-26 (Jul 16.9, Aug 31.0) — delegation working.
-Step 4: level-up 2026-10-01 — no hook-event changes; `/hooks` now logs failed-hook stderr + exit code.
+**Step 3: fires 10-01 → 10-15, control OK, every fire classified from its command.**
+`check-review-gate` 150 fires after 10-04: **77% FP → TUNE.** Of those, 41 came from `2>&1` (fixed in
+96cdfbf), 21 from a flag written in the same cell, 21 from data/media files classed as code
+(classify-diff.js:440-455,508), and 14 from quoted text or a cwd fallback.
+`check-cd-persistence` **89% FP → TUNE** (33 relative-after-absolute cd, :277-300).
+`check-anticheat` **75% FP → TUNE** (`shapeOf` :213-229 needs an exact shape match).
+`check-read-size` **97% FP → TUNE**: 34 headless `claude -p` judge workers that have no agent_id. Fix it
+in the batch runner that launches them, not in this hook. `check-d-entry-timing` **CLEAN** (2 fires, both before
+warn-only). `check-subagent-restore` **TUNE → tuned** (see above). It also produced 20 harmless
+Gemfile.lock restores in lane worktrees: correct by rule, so counted as friction.
+Latency: every hook's median is ≤160 ms. Max is d-entry at 265 ms, once, on a cold `~/.claude` add-all.
+Step 3.5: Bash:Agent **8.4:1** for October (14.3 in Sep).
+Step 4: level-up 10-12: `--debug` per-hook timing, `allow_large`, `onFailure:"block"` (not adopted).
+Still open: settings.json `timeout` values are in seconds (3000 = 50 min).
+Residual: `git push 2>&1 origin feat` (the `&` cuts the segment).
 
-**Not applied — hook edits are blocked by the auto-mode classifier (Self-Modification).** Plan:
-`plans/2026-10-01-hook-tunes-p4.md` (supersedes P3's open items).
-
-**Method note for next time: a fire COUNT cannot produce any of these three findings.** The table said
-`check-cd-persistence 37 (30 sessions)`, which reads as a busy, healthy guard. Only reading each fire's
-triggering command showed 84% of them were wrong. Classify by context, never by volume.
-
-Next review due: **2026-10-15.**
+Next review due: **2026-10-29.**
 
 ## Trigger
 - Manual: user invokes `/hook-review`

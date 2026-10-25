@@ -1,6 +1,6 @@
 # Skills
 
-30 named procedures, invoked via `/<slug>` in a Claude Code session. The agent reads the skill's `SKILL.md` and executes the procedure inside the same conversation.
+29 named procedures, invoked via `/<slug>` in a Claude Code session. The agent reads the skill's `SKILL.md` and executes the procedure inside the same conversation.
 
 ## One line per skill
 
@@ -28,7 +28,6 @@
 | `freeze` | Block edits outside a specific directory during scoped debugging |
 | `careful` | Block destructive Bash commands (`rm -rf`, `DROP TABLE`, force push, etc.) |
 | `git-guardrails-claude-code`* | Install hooks that block dangerous git commands |
-| `setup-pre-commit`* | Husky + lint-staged + type check + tests pre-commit setup |
 | `prompt-engineering` | Structure and tune LLM prompts using battle-tested patterns |
 | `learn` | Extract insights from a URL / article / book into a knowledge graph |
 | `level-up` | Weekly scout of Claude Code + Anthropic release notes |

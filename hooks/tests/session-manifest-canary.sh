@@ -288,7 +288,10 @@ if [ -n "$PUSHCMD" ]; then
   out7="$(printf '{"tool_input":{"command":"git status"}}' | bash -c "$PUSHCMD")"
   [ -z "$out7" ] && ok "inline git-push warn silent on non-push" || no "inline warn noisy: $out7"
 else
-  no "could not extract inline git-push command from settings.json"
+  # Retired on purpose: b244f70 (2026-10-04, owner-approved S81 trims) removed the print-only
+  # inline push warn. Nothing registered = nothing to test; NOT counted as a pass. Re-adding a
+  # PreToolUse command containing 'git push' re-arms the two assertions above automatically.
+  echo "  SKIP  inline git-push warn retired (b244f70) — no registered command to test"
 fi
 
 echo

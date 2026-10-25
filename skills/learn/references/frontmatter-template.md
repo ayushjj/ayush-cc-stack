@@ -15,6 +15,8 @@ source: "attribution — @handle, article title, or conversation"
 source_file: "sources/author-slug-article-slug.md"
 date: YYYY-MM-DD
 domain: "ai"
+kind: "principle"          # thinking-tool | principle | practice | bet
+# bet_date: YYYY-MM-DD    # only when kind is bet — the date the bet was made
 ---
 
 2-4 sentences of prose explaining the insight. Weave [[wikilinks]] naturally into

@@ -297,6 +297,165 @@ function matchGitCommit(cmd) {
     cPathResolved: resolveAssignedVars(seg.cPath, joinContinuations(cmd), seg.offset) };
 }
 
+/**
+ * Blank heredoc BODIES (length-preserving: every char but `\` and newline → space)
+ * so a body that merely MENTIONS `git push` / `gh pr create` — a commit message, a
+ * doc — is not read as a send. Used ONLY by the push/PR matchers.
+ *
+ * WHY this is safe where stripQuotedRegions refused (its five fail-open bugs): it
+ * blanks a body only when it finds the terminator EXACTLY as bash does, and if
+ * any heredoc is unterminated it returns the input UNCHANGED. Every doubt keeps
+ * text scannable, so the failure direction is a spurious block, never a hidden send:
+ *   - terminator = a line equal to the delimiter; `<<-` strips leading TABS only;
+ *     an indented terminator for `<<` does not close (bash 1/2)
+ *   - delimiter may be quoted with any chars ('DOC.md', '---') (bash 3)
+ *   - several markers on one line queue their bodies in order (bash 4)
+ *   - split on `\n` only, so `EOF\r` is not a terminator, as in bash (bash 5)
+ *   - markers inside quotes or after a word-start `#` are ignored; `<<<` is a
+ *     here-string. Measured live S81: the fix-round commit message quoted
+ *     `gh pr create --head X` and the gate blocked that COMMIT.
+ */
+function heredocMarkers(line) {
+  const out = [];
+  let q = null;
+  // S81 re-check: shapes where bash's reading of the line differs from ours — a
+  // trailing `\` joins the next line (so it is not body), `((`/`$((` makes `<<` a
+  // shift. Refuse to model them: null keeps the whole cell scannable.
+  if (/\\$/.test(line) || line.indexOf('((') !== -1) return null;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (q) {
+      if (q === '"' && ch === '\\') { i++; continue; }
+      if (ch === q) q = null;
+      continue;
+    }
+    if (ch === '\\') { i++; continue; }
+    if (ch === "'" || ch === '"') { q = ch; continue; }
+    if (ch === '#' && (i === 0 || /\s/.test(line[i - 1]))) break;
+    if (ch === '<' && line[i + 1] === '<') {
+      if (line[i + 2] === '<') { i += 2; continue; }          // here-string
+      let j = i + 2;
+      const tabs = line[j] === '-';
+      if (tabs) j++;
+      while (line[j] === ' ' || line[j] === '\t') j++;
+      const m = /^(?:'([^']*)'|"([^"]*)"|((?:\\.|[^\s;&|<>()'"])+))/.exec(line.slice(j));
+      if (!m) return null;                                     // unparseable → caller fails closed
+      // `'EOF'x` / `EOF"x"`: bash's delimiter continues past the quote — refuse.
+      const after = line[j + m[0].length];
+      if (after !== undefined && !/[\s;&|<>()]/.test(after)) return null;
+      const delim = m[1] !== undefined ? m[1] : m[2] !== undefined ? m[2] : m[3].replace(/\\(.)/g, '$1');
+      out.push({ delim, tabs });
+      i = j + m[0].length - 1;
+    }
+  }
+  if (q) return null;            // quote still open at end of line: a multi-line string
+  return out;
+}
+function blankHeredocBodies(cmd) {
+  if (typeof cmd !== 'string' || cmd.indexOf('<<') === -1) return cmd;
+  const lines = cmd.split('\n');
+  const out = [];
+  let pending = [];
+  for (const line of lines) {
+    if (pending.length) {
+      const h = pending[0];
+      if ((h.tabs ? line.replace(/^\t+/, '') : line) === h.delim) { pending.shift(); out.push(line); continue; }
+      out.push(line.replace(/[^\\]/g, ' '));
+      continue;
+    }
+    out.push(line);
+    const mk = heredocMarkers(line);
+    if (mk === null) return cmd;
+    pending = mk;
+  }
+  return pending.length ? cmd : out.join('\n');
+}
+
+/**
+ * Every `git push` in a cell that sends commits, merged (S81: the review gate moved
+ * here from commit; review round S81 made it refspec-aware).
+ *
+ * WHY sources, not "HEAD": a push names what it sends. `git push origin feat` from a
+ * clean main, `feat:main`, `--all`, and `:` (matching) all sent unreviewed code past
+ * a HEAD-only gate (reproduced by 3 of 5 reviewers). So each refspec's SOURCE side is
+ * returned; the gate diffs each one.
+ *
+ * Returns {matched, cPath, cPathResolved, offset, sources[], all, tags}:
+ *   sources  refspec sources ('HEAD' for a bare `git push`), deletes (`:dst`) dropped
+ *   all      --all / --mirror / --branches / a `:` or `+:` matching refspec
+ *   tags     --tags (not --follow-tags: its tags are reachable from the sources)
+ * Not matched: --dry-run/-n, --delete/-d, or only `:dst` delete refspecs. Options that
+ * take a VALUE (-o/--push-option, --repo, --receive-pack, --exec) consume it, so
+ * `-o -n` is not read as dry-run. Same tokenizer + fail-closed text residual as
+ * matchGitCommit (a heredoc BODY line `git push` reads as a push — see stripQuotedRegions
+ * for why heredoc termination is not modelled).
+ */
+const PUSH_VALUE_OPTS = new Set(['-o', '--push-option', '--repo', '--receive-pack', '--exec']);
+function parsePush(args) {
+  const r = { send: true, sources: [], all: false, tags: false };
+  const pos = [];
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    // Shell redirections never reach here: scanGitSegments drops them (S84 rule, moved
+    // there 2026-10-15 so add/commit/push share one copy).
+    if (PUSH_VALUE_OPTS.has(a)) { i++; continue; }
+    if (a === '--dry-run' || a === '-n' || a === '--delete' || a === '-d') { r.send = false; return r; }
+    if (a === '--all' || a === '--mirror' || a === '--branches') { r.all = true; continue; }
+    // --follow-tags adds only annotated tags reachable from what is pushed, which
+    // the pushed sources already cover; enumerating every unmerged tag false-blocked.
+    if (a === '--tags') { r.tags = true; continue; }
+    if (a.startsWith('-')) continue;
+    pos.push(a);
+  }
+  const refspecs = pos.slice(1); // pos[0] is the remote
+  for (const spec of refspecs) {
+    const s = spec.replace(/^\+/, '');
+    if (s === ':') { r.all = true; continue; }
+    const c = s.indexOf(':');
+    const src = c === -1 ? s : s.slice(0, c);
+    if (src) r.sources.push(src);           // empty src = `:dst` delete, sends nothing
+  }
+  if (refspecs.length === 0 && !r.all) r.sources.push('HEAD');
+  if (!r.sources.length && !r.all && !r.tags) r.send = false; // deletes only
+  return r;
+}
+function matchGitPush(cmd) {
+  const segs = scanGitSegments(blankHeredocBodies(cmd)).filter(s => s.sub === 'push')
+    .map(s => ({ s, p: parsePush(s.args) })).filter(x => x.p.send);
+  if (!segs.length) return { matched: false };
+  const first = segs[0].s;
+  return {
+    matched: true, cPath: first.cPath, offset: first.offset,
+    cPathResolved: resolveAssignedVars(first.cPath, joinContinuations(cmd), first.offset),
+    sources: [...new Set(segs.flatMap(x => x.p.sources))],
+    all: segs.some(x => x.p.all), tags: segs.some(x => x.p.tags),
+  };
+}
+
+/**
+ * `gh pr create` / `gh pr new`, with gh options before or after `pr`
+ * (`gh -R o/r pr create`, `gh pr -R o/r create`). Unanchored like scanGitSegments'
+ * `\bgit`, so `env gh`, `command gh`, `if …; then gh …`, `{ gh …; }` and backticks
+ * all match (the anchored first cut missed every one). Between `gh`/`pr`/`create`
+ * only option tokens may appear, so `gh pr list --search create` is not a create.
+ * `--head`/`-H` names the branch the PR sends (`owner:branch` → branch); else HEAD.
+ * Repo resolution is the caller's (cwd / `cd` prefix) — gh has no `-C`.
+ * Residual: `gh api …/pulls` (raw API) is not matched.
+ */
+function matchGhPrCreate(cmd) {
+  if (typeof cmd !== 'string' || !cmd) return { matched: false };
+  const joined = joinContinuations(blankHeredocBodies(cmd));
+  const OPT = String.raw`(?:[ \t]+--?[A-Za-z][\w-]*(?:=\S+|[ \t]+(?!-)[^\s;&|)]+)?)*?`;
+  const re = new RegExp(String.raw`\bgh` + OPT + String.raw`[ \t]+pr` + OPT + String.raw`[ \t]+(?:create|new)\b([^\n;&|]*)`);
+  const mm = re.exec(joined);
+  if (!mm) return { matched: false };
+  const h = /(?:^|[ \t])(?:--head|-H)(?:=|[ \t]+)("[^"]*"|'[^']*'|\S+)/.exec(mm[1]);
+  const head = h ? h[1].replace(/^(["'])(.*)\1$/, '$2').replace(/^.*:/, '') : 'HEAD';
+  return { matched: true, cPath: null, cPathResolved: null, offset: mm.index,
+    sources: [head || 'HEAD'], all: false, tags: false };
+}
+
+
 // Join backslash-newline continuations so `git \<newline> commit -m x` still
 // reads as one segment once newline becomes a separator below.
 function joinContinuations(cmd) {
@@ -434,11 +593,20 @@ function scanGitSegments(cmd) {
       // the quoting rule — that seam is what let the two implementations drift.
       const args = [];
       for (let j = i + 1; j < toks.length; j++) {
+        // Shell redirections are not arguments (S84 for push; hook-review 2026-10-15 for
+        // add/commit). `git add -A 2>/dev/null` replayed `2>/dev/null` as a pathspec that
+        // matched nothing and the D-entry gate went dark; `add x > f` replayed `f` as a
+        // pathspec. `&` cuts the segment, so `2>&1` arrives as a bare `2>`; a bare operator
+        // (`>`, `2>>`, `<`) owns its target token. Tested on the RAW token, before unquoting,
+        // so a quoted `">x"` argument is kept.
+        if (/^\d*(?:>|<)/.test(toks[j])) { if (/^\d*(?:>>?|>\||<)$/.test(toks[j])) j++; continue; }
         let v;
         [v, j] = rejoinQuotedArg(toks, j);
         args.push(v);
       }
-      out.push({ sub: t, cPath, args, offset: s.index });
+      // `(cd x && git push)`: the subshell's `)` sticks to the last token; strip it
+      // from the subcommand so the push is still recognised (S81 review round).
+      out.push({ sub: t.replace(/\)+$/, ''), cPath, args, offset: s.index });
       break;
     }
   }
@@ -499,7 +667,84 @@ function unexpandedPath(p) {
   return typeof p === 'string' && /[$`]/.test(p);
 }
 
+/**
+ * A WARN-ONLY hook's warning, on the channel that REACHES THE MODEL.
+ *
+ * Probed 2026-10-04 (claude -p, Claude Code 2.1.289, positive + negative controls, 2 runs)
+ * and confirmed by code.claude.com/docs/en/hooks: for PreToolUse/PostToolUse, exit-0
+ * stdout and stderr go to the debug log only — "Claude never sees it". Only stdout JSON
+ * `hookSpecificOutput.additionalContext` is added to the model's context. Every warning
+ * the alignment, memory-size and wrap-collision hooks ever printed was invisible to the
+ * model (alignment cited 0/159 next turns). stderr is still written so the text stays in
+ * the debug log / transcript. Call ONCE per hook run: stdout must hold one JSON object.
+ * Canary: hooks/tests/warning-delivery-canary.sh.
+ */
+function warnModel(text, event = 'PreToolUse') {
+  const t = String(text);
+  try { process.stderr.write(t.endsWith('\n') ? t : t + '\n'); } catch { /* best-effort */ }
+  // writeSync(1), not stdout.write: every caller exits right after, and an async pipe
+  // write can be cut off on exit (the same fix check-review-gate.js --delta needed).
+  try {
+    require('fs').writeSync(1, JSON.stringify({
+      hookSpecificOutput: { hookEventName: event, additionalContext: t.trim() },
+    }) + '\n');
+  } catch { /* stdout closed (EPIPE): the stderr copy above is the record; never crash a tool call */ }
+}
+
+/**
+ * What a cell will stage BEFORE its commit — invisible to `git diff --cached` because a
+ * PreToolUse hook runs before the shell does. S81 replay trial: 7 of 8 trial commits were
+ * `git add … && git commit …` in one cell, and both check-anticheat and check-eval-first
+ * read an empty index and went dark on every one.
+ *
+ * Returns {any, whole, trackedWhole, paths, trackedPaths}:
+ *   whole         tracked + untracked, whole tree   (`add -A` / `add --all` with no path)
+ *   trackedWhole  modified TRACKED files, whole tree (`commit -a`, `add -u` with no path)
+ *   paths         pathspecs whose tracked + untracked files are staged (`add <p>`, `add -A <p>`)
+ *   trackedPaths  pathspecs, tracked files only (`add -u <p>`, `commit … -- <p>`)
+ * Pathspecs are cwd-relative, as the shell sees them; whole-tree queries must run from the
+ * repo top (a subdirectory `git ls-files` sees only that subdirectory).
+ * Only adds aimed at the SAME repo as the commit count (`-C` compared); `commit -a` always
+ * adds the whole tracked tree, whatever other adds the cell has (review of 18d86ef: an
+ * unrelated add used to narrow it). Residuals, all pre-existing: variables in pathspecs,
+ * `(cd x && git add y)`, escaped spaces, `git rm`, and a commit message whose text contains
+ * `git add` / `git commit` lines (fail-closed: a spurious block).
+ */
+function pendingStage(cmd) {
+  const out = { any: false, whole: false, trackedWhole: false, paths: [], trackedPaths: [] };
+  const segs = scanGitSegments(cmd);
+  let commit = null;
+  for (const s of segs) if (s.sub === 'commit') commit = s;
+  if (!commit) return out;
+  // commit's own flags: -a / --all / combined short flags containing a (-am, -av); a pathspec
+  // after `--` commits those paths' working-tree state.
+  const dd = commit.args.indexOf('--');
+  const cflags = dd === -1 ? commit.args : commit.args.slice(0, dd);
+  if (cflags.some(a => a === '--all' || /^-[A-Za-z]*a[A-Za-z]*$/.test(a))) out.trackedWhole = true;
+  if (dd !== -1) out.trackedPaths.push(...commit.args.slice(dd + 1));
+  for (const s of segs) {
+    if ((s.sub !== 'add' && s.sub !== 'stage') || s.offset >= commit.offset) continue;
+    if ((s.cPath || null) !== (commit.cPath || null)) continue;     // another repo
+    let all = false, upd = false;
+    const ps = [];
+    let afterDD = false;
+    for (const a of s.args) {
+      if (!afterDD && a === '--') { afterDD = true; continue; }
+      if (!afterDD && (a === '-A' || a === '--all')) all = true;
+      else if (!afterDD && (a === '-u' || a === '--update')) upd = true;
+      else if (afterDD || !a.startsWith('-')) ps.push(a);
+    }
+    if (ps.length) (upd && !all ? out.trackedPaths : out.paths).push(...ps);
+    else if (all) out.whole = true;
+    else if (upd) out.trackedWhole = true;
+  }
+  out.any = out.whole || out.trackedWhole || out.paths.length > 0 || out.trackedPaths.length > 0;
+  return out;
+}
+
 module.exports = {
+  pendingStage,
+  warnModel,
   readHookPayload,
   isSubagentCall,
   readToolInput,
@@ -508,6 +753,10 @@ module.exports = {
   overrideRequested,
   bypassed,
   matchGitCommit,
+  matchGitPush,
+  matchGhPrCreate,
+  joinContinuations,
+  blankHeredocBodies,
   scanGitSegments,
   matchGitAdds,
   unexpandedPath,

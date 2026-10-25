@@ -53,8 +53,23 @@ if (isGit !== 'true') {
   process.exit(0);
 }
 
-// Check staged files for source code
-const staged = tryExec('git diff --cached --name-only');
+// Every git query runs from the repo TOP: `git ls-files` pathspecs are cwd-relative, so a
+// session working in a subdirectory found 0 tests in a repo holding 126 (S81 replay trial).
+const top = tryExec('git rev-parse --show-toplevel');
+const q = (p) => "'" + String(p).replace(/'/g, "'\\''") + "'";
+const atTop = top ? `git -C ${q(top)} ` : 'git ';
+
+// Check staged files for source code — plus what an `add` / `commit -a` in this SAME cell
+// will stage, which the index cannot show yet (hook-input.js pendingStage).
+let staged = tryExec(atTop + 'diff --cached --name-only');
+const pend = hookLib.pendingStage(command);
+const spec = (ps) => ' -- ' + ps.map(q).join(' ');
+// Whole-tree queries from the repo TOP; pathspec queries from the cwd the shell will use.
+if (pend.whole) staged += '\n' + tryExec(atTop + 'ls-files -m -o --exclude-standard');
+if (pend.trackedWhole) staged += '\n' + tryExec(atTop + 'ls-files -m');
+if (pend.paths.length) staged += '\n' + tryExec('git ls-files -m -o --exclude-standard' + spec(pend.paths));
+if (pend.trackedPaths.length) staged += '\n' + tryExec('git ls-files -m' + spec(pend.trackedPaths));
+staged = staged.trim();
 if (!staged) {
   process.exit(0);
 }
@@ -85,7 +100,7 @@ if (!hasSourceCode) {
 // 662 -> 512 matched files, still silent on 477 real specs). `__tests__/*` is kept as a
 // directory glob because that directory name is itself the Jest test convention.
 const testFileSearch = tryExec(
-  'git ls-files ' +
+  atTop + 'ls-files ' +
     '"*.test.*" "*.spec.*" ' +
     '"**/test_*.py" "**/test_*.rb" "**/test_*.ts" "**/test_*.js" ' +
     '"**/*_test.py" "**/*_test.go" "**/*_test.rb" "**/*_test.ts" "**/*_test.js" ' +

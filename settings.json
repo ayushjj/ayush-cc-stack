@@ -2,7 +2,8 @@
   "cleanupPeriodDays": 365,
   "env": {
     "CLAUDE_ANTICHEAT_BLOCK": "1",
-    "CLAUDE_EVAL_FIRST_BLOCK": "1"
+    "CLAUDE_EVAL_FIRST_BLOCK": "1",
+    "CLAUDE_D_ENTRY_TIMING_WARN_ONLY": "1"
   },
   "permissions": {
     "allow": [
@@ -31,7 +32,6 @@
     ],
     "ask": [
       "Skill(arena)",
-      "Skill(audit-project)",
       "Skill(automate-me)",
       "Skill(connect)",
       "Skill(learn-book)",
@@ -50,7 +50,6 @@
     "prune-memory": "user-invocable-only",
     "skill-audit": "user-invocable-only",
     "telemetry": "user-invocable-only",
-    "audit-project": "off",
     "publish-stack": "user-invocable-only",
     "careful": "user-invocable-only",
     "freeze": "user-invocable-only"
@@ -63,6 +62,11 @@
             "type": "command",
             "command": "bash \"$HOME/.claude/hooks/hook-liveness-sessionstart.sh\"",
             "timeout": 15000
+          },
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/hooks/plugin-surface-watch.js\"",
+            "timeout": 10000
           }
         ]
       }
@@ -81,16 +85,6 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "Write|Edit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "echo 'File modified \u2014 remember to run relevant check commands before committing'",
-            "timeout": 3000
-          }
-        ]
-      },
-      {
         "matcher": "Edit|Write|MultiEdit|NotebookEdit",
         "hooks": [
           {
@@ -106,8 +100,17 @@
         "hooks": [
           {
             "type": "command",
-            "command": "if [ \"$(uname)\" = \"Darwin\" ]; then afplay /System/Library/Sounds/Pop.aiff; elif command -v powershell >/dev/null 2>&1; then powershell -c '[Console]::Beep(600, 200)'; fi && echo 'Turn complete. Check status line for context usage.'",
+            "command": "if [ \"$(uname)\" = \"Darwin\" ]; then afplay /System/Library/Sounds/Pop.aiff; elif command -v powershell >/dev/null 2>&1; then powershell -c '[Console]::Beep(600, 200)'; fi",
             "timeout": 5000
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/hooks/checkin-due.js\"",
+            "timeout": 10
           }
         ]
       }
@@ -135,17 +138,6 @@
       }
     ],
     "PreToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node -e \"let r='';try{if(!process.stdin.isTTY)r=require('fs').readFileSync(0,'utf8')}catch(e){};if(!r.trim()&&process.env.CLAUDE_TOOL_INPUT)r=process.env.CLAUDE_TOOL_INPUT;let p={};try{p=r.trim()?JSON.parse(r):{}}catch(e){};const c=(p.tool_input&&p.tool_input.command)||p.command||'';if(c.includes('git push')){process.stdout.write('WARN: About to push to remote \u2014 confirm before proceeding');}\"",
-            "if": "Bash(git push*)",
-            "timeout": 3000
-          }
-        ]
-      },
       {
         "matcher": "Bash",
         "hooks": [
@@ -227,16 +219,6 @@
         ]
       },
       {
-        "matcher": "Skill",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"$HOME/.claude/hooks/check-skill-slug.js\"",
-            "timeout": 3000
-          }
-        ]
-      },
-      {
         "matcher": "Edit|Write|MultiEdit",
         "hooks": [
           {
@@ -255,6 +237,16 @@
             "timeout": 2000
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/hooks/check-subagent-restore.js\"",
+            "timeout": 3000
+          }
+        ]
       }
     ],
     "UserPromptSubmit": [
@@ -264,6 +256,11 @@
             "type": "command",
             "command": "node \"$HOME/.claude/hooks/context-wrap-trigger.js\"",
             "timeout": 3000
+          },
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/hooks/challenge-check.js\"",
+            "timeout": 5
           }
         ]
       }
@@ -288,7 +285,8 @@
       "source": {
         "source": "git",
         "url": "https://github.com/EveryInc/compound-engineering-plugin.git"
-      }
+      },
+      "autoUpdate": true
     },
     "expo-plugins": {
       "source": {
@@ -342,7 +340,12 @@
     "soft_deny": [
       "$defaults",
       "Bash(railway * --environment production*)",
-      "Bash(git push:*)"
+      "Bash(git push --force*)",
+      "Bash(git push -f*)",
+      "Bash(git push * --force*)",
+      "Bash(git push * -f *)",
+      "Bash(gh pr merge*)",
+      "Bash(ALLOW_PUSH=1 git push*)"
     ],
     "hard_deny": [
       "Bash(rm -rf /)",

@@ -52,59 +52,148 @@ run 2 "main relative cd, same transcript_path, no agent_id → BLOCK" "$HOOKS/ch
 run 2 "blank agent_id fails closed → BLOCK" "$HOOKS/check-cd-persistence.js" '{"tool_name":"Bash","agent_id":"","tool_input":{"command":"cd scripts && ls"}}'
 run 2 "non-string agent_id fails closed → BLOCK" "$HOOKS/check-cd-persistence.js" '{"tool_name":"Bash","agent_id":true,"tool_input":{"command":"cd scripts && ls"}}'
 run 2 "agent_type without agent_id (--agent main session) → BLOCK" "$HOOKS/check-cd-persistence.js" '{"tool_name":"Bash","agent_type":"Explore","tool_input":{"command":"cd scripts && ls"}}'
+# Absolute-valued variables (2026-10-04). Each ALLOW is a real main-session fire shape that
+# the certain-resolution path could not see (transcript replay: 12 of 17 still-blocking
+# `cd $VAR` commands). Each BLOCK pins a relative shape the new rule must not swallow.
+CDH="$HOOKS/check-cd-persistence.js"
+cdj(){ printf '{"tool_name":"Bash","tool_input":{"command":"%s"}}' "$1"; }
+run 0 "cd \$TMPDIR → allow"                         "$CDH" "$(cdj 'cd $TMPDIR; curl -s x')"
+run 0 "cd \"\$TMPDIR\" || cd /abs → allow"           "$CDH" "$(cdj 'cd \"$TMPDIR\" 2>/dev/null || cd /private/tmp/s')"
+run 0 "T=\$(mktemp -d); cd \$T → allow"              "$CDH" "$(cdj 'T=$(mktemp -d); cd $T && git init -q')"
+run 0 "set -e; T=\$(mktemp -d); cd \"\$T\" → allow"  "$CDH" "$(cdj 'set -e; T=$(mktemp -d); cd \"$T\" && git init -q .')"
+run 0 "S=/abs assigned after && → allow"            "$CDH" "$(cdj 'export X=1 && S=/private/tmp/s/tree && rm -rf \"$S\" && mkdir -p \"$S\" && cd $S && ls')"
+run 0 "for-loop body R=/abs/\$w; cd \$R → allow"     "$CDH" "$(cdj 'for w in a b; do R=~/work/$w; cd $R; ls; done')"
+run 0 "for r in ~/a ~/b; cd \$r → allow"             "$CDH" "$(cdj 'for r in ~/work/a ~/work/b; do echo $r; cd $r; ls; done')"
+run 0 "root=\$(git rev-parse --show-toplevel) → allow" "$CDH" "$(cdj 'root=$(git rev-parse --show-toplevel); cd \"$root\" && ls')"
+run 0 "cd \$(git rev-parse --show-toplevel) → allow"  "$CDH" "$(cdj 'cd $(git rev-parse --show-toplevel) && ls')"
+run 2 "REL=scripts; cd \$REL → BLOCK"                 "$CDH" "$(cdj 'REL=scripts; cd $REL && ls')"
+run 2 "cd ../x → BLOCK"                               "$CDH" "$(cdj 'cd ../x && ls')"
+run 2 "D=data/x; cd \$D (real TP 09-23) → BLOCK"      "$CDH" "$(cdj 'S=/abs/print.py; D=data/proj/meeting; cd $D && ls')"
+run 2 "mktemp with relative template → BLOCK"         "$CDH" "$(cdj 'T=$(mktemp -d tmp.XXXX); cd $T && ls')"
+run 2 "cd \$PWD/sub (relative in disguise) → BLOCK"   "$CDH" "$(cdj 'cd $PWD/sub && ls')"
+run 2 "for r in a ~/b, one relative word → BLOCK"     "$CDH" "$(cdj 'for r in sub ~/work/b; do echo $r; cd $r; done')"
+run 2 "one abs, one relative assignment → BLOCK"      "$CDH" "$(cdj 'W=/abs; [ -d x ] && W=rel; cd $W')"
+run 2 "abs assignment only in a comment → BLOCK"      "$CDH" "$(cdj '# W=/abs\ncd $W && ls')"
+run 2 "d=\$1 (unknown) → BLOCK"                       "$CDH" "$(cdj 'd=$1; cd $d && ls')"
+# Review of 7aa0703 (2026-10-04): false ALLOWS — each cd below lands relative.
+run 2 "mktemp -p. -t x (relative -p beats -t) → BLOCK" "$CDH" "$(cdj 'T=$(mktemp -d -p. -t x); cd $T && ls')"
+run 2 "mktemp --tmpdir=. → BLOCK"                     "$CDH" "$(cdj 'T=$(mktemp -d --tmpdir=.); cd $T && ls')"
+run 2 "TMPDIR=build; cd \$TMPDIR → BLOCK"             "$CDH" "$(cdj 'TMPDIR=build; cd $TMPDIR && ls')"
+run 2 "export OLDPWD=sub; cd \$OLDPWD → BLOCK"        "$CDH" "$(cdj 'export OLDPWD=sub; cd $OLDPWD && ls')"
+run 2 "HOME=build; cd \$HOME → BLOCK"                 "$CDH" "$(cdj 'HOME=build; cd $HOME && ls')"
+run 2 "HOME=build; cd ~ → BLOCK"                      "$CDH" "$(cdj 'HOME=build; cd ~ && ls')"
+run 2 "D=\"~/x\" (quoted tilde is literal) → BLOCK"    "$CDH" "$(cdj 'D=\"~/x\"; cd $D && ls')"
+run 2 "cd '\$TMPDIR' (single-quoted literal) → BLOCK" "$CDH" "$(cdj 'cd \u0027$TMPDIR\u0027 && ls')"
+run 2 "cd ~+/sub (~+ is \$PWD) → BLOCK"               "$CDH" "$(cdj 'cd ~+/sub && ls')"
+# Positive controls for the same code paths — these must stay allowed.
+run 0 "mktemp -d -p /tmp -t x → allow"                "$CDH" "$(cdj 'T=$(mktemp -d -p /tmp -t x); cd $T && ls')"
+run 0 "mktemp -d --tmpdir=\"\$TMPDIR\" → allow"         "$CDH" "$(cdj 'T=$(mktemp -d --tmpdir=\"$TMPDIR\"); cd $T && ls')"
+run 0 "D=~/x (unquoted tilde); cd \$D → allow"        "$CDH" "$(cdj 'D=~/x; cd $D && ls')"
+run 0 "cd ~ / cd \"\$HOME/x\" / cd \${OLDPWD} → allow"  "$CDH" "$(cdj 'cd ~ && cd \"$HOME/x\" && cd ${OLDPWD}')"
+run 0 "TMPDIR=/abs; cd \$TMPDIR → allow"              "$CDH" "$(cdj 'TMPDIR=/private/tmp/x; cd $TMPDIR && ls')"
 
-echo "== 2. review-gate (DELTA-aware: per-repo flag, unreviewed-CODE-only blocking, S256) =="
+# Oversized commands (>20k chars) take a cheaper path; ${HOME:+sub} / ${HOME#/} expand RELATIVE
+# (review of 2e134ba: `\$\{?HOME\b` accepted them).
+BIG=$(node -e 'console.log("a".repeat(21000))')
+run 2 "oversized: cd \${HOME:+sub} → BLOCK" "$HOOKS/check-cd-persistence.js" "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"echo $BIG; cd \${HOME:+sub}\"}}"
+run 0 "oversized: cd \${HOME}/x → allow" "$HOOKS/check-cd-persistence.js" "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"echo $BIG; cd \${HOME}/x\"}}"
+
+echo "== 2. review-gate (PUSH-time, S81: branch-vs-base delta, per-repo flag, unreviewed-CODE-only blocking) =="
+# S81 moved the gate from `git commit` to `git push` / `gh pr create` (owner rule:
+# review per slice, self-check per commit). The surface is what a push SENDS: every
+# committed change on this branch since it left the default branch (merge-base with
+# origin/HEAD). /review and the flag writer read base→working-tree, a superset, so a
+# review of uncommitted work still covers it once committed. Test repos therefore get
+# a bare origin, a pushed base, and COMMITTED changes — a working-tree-only edit is
+# not something a push sends.
 REVIEW_SCRIPTS="$HOME/.claude/skills/review/scripts"
 WRITE_FLAG="$REVIEW_SCRIPTS/write-review-flag.js"
 node --check "$WRITE_FLAG" 2>/dev/null && pass "syntax write-review-flag.js" || fail "syntax write-review-flag.js" 1 0
 node --check "$REVIEW_SCRIPTS/diff-chunks.js" 2>/dev/null && pass "syntax diff-chunks.js" || fail "syntax diff-chunks.js" 1 0
-R2=$(mktemp -d)
-git -C "$R2" init -q; git -C "$R2" config user.email t@t; git -C "$R2" config user.name t
+# mkrepo <dir>: repo on master with a bare origin. pushbase: publish base + set origin/HEAD.
+mkrepo(){ git init -q --bare "$1.origin.git"; git -C "$1" init -q -b master
+  git -C "$1" config user.email t@t; git -C "$1" config user.name t; git -C "$1" remote add origin "$1.origin.git"; }
+pushbase(){ git -C "$1" push -q origin master 2>/dev/null; git -C "$1" remote set-head origin master; }
+cm(){ git -C "$1" add -A; git -C "$1" commit -qm "${2:-wip}"; }
+flagof(){ node -e 'const m=require(process.env.HOME+"/.claude/skills/review/scripts/diff-chunks.js");console.log(m.flagPath(require("fs").realpathSync(process.argv[1])))' "$1"; }
+R2=$(mktemp -d); mkrepo "$R2"
 printf 'var a=1\n' > "$R2/f.js"
 printf '{"evt":"base"}\n' > "$R2/skill-log.jsonl"      # telemetry log tracked from base
-git -C "$R2" add f.js skill-log.jsonl; git -C "$R2" commit -qm base
-printf 'var b=2\n' >> "$R2/f.js"                       # a real CODE working diff
-J="{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git -C $R2 commit -m x\"}}"
-# Per-repo flag path via the SAME module both sides use (one ruler, P51).
-FLAG2=$(node -e 'const m=require(process.env.HOME+"/.claude/skills/review/scripts/diff-chunks.js");console.log(m.flagPath(require("fs").realpathSync(process.argv[1])))' "$R2")
-rm -f "$FLAG2"
-run 2 "code diff, no flag → BLOCK"                     "$REVIEW_GATE" "$J"
+cm "$R2" base; pushbase "$R2"
+printf 'var b=2\n' >> "$R2/f.js"; cm "$R2"             # an unpushed CODE commit
+J="{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git -C $R2 push\"}}"
+FLAG2=$(flagof "$R2"); rm -f "$FLAG2"
+run 2 "unpushed code commit, no flag → push BLOCK"     "$REVIEW_GATE" "$J"
+# ~/.claude is exempt (owner, 2026-10-10: "The sync should happen without any review
+# gate" — wrap Step 8 sync). HOME is pointed at a temp dir so the exempt repo is a
+# fixture, never the real ~/.claude. Positive control: a SIBLING repo under the same
+# HOME, same unpushed code commit, still BLOCKS — the exemption is one path, not HOME.
+HX=$(mktemp -d); mkdir -p "$HX/.claude" "$HX/other"; mkrepo "$HX/.claude"; printf 'var a=1\n' > "$HX/.claude/f.js"; cm "$HX/.claude" base; pushbase "$HX/.claude"
+printf 'var b=2\n' >> "$HX/.claude/f.js"; cm "$HX/.claude"
+mkrepo "$HX/other"; printf 'var a=1\n' > "$HX/other/f.js"; cm "$HX/other" base; pushbase "$HX/other"
+printf 'var b=2\n' >> "$HX/other/f.js"; cm "$HX/other"
+run 0 "~/.claude unpushed code, no flag → push ALLOW (owner exemption)" "$REVIEW_GATE" "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git -C $HX/.claude push\"}}" HOME="$HX"
+run 0 "~/.claude via tilde → push ALLOW (owner exemption)" "$REVIEW_GATE" "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git -C ~/.claude push\"}}" HOME="$HX"
+run 2 "sibling repo under same HOME, no flag → push still BLOCK (control)" "$REVIEW_GATE" "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git -C $HX/other push\"}}" HOME="$HX"
+rm -rf "$HX"
+# Positive control for the redirect fix below: stripping `2>&1` must not open the gate.
+run 2 "no flag, push origin master 2>&1 → still BLOCK"  "$REVIEW_GATE" "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git -C $R2 push origin master 2>&1\"}}"
+run 2 "no flag, push origin master >/dev/null 2>&1 → still BLOCK" "$REVIEW_GATE" "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git -C $R2 push origin master >/dev/null 2>&1\"}}"
+# The S81 move itself, both directions: commits are free, sending is gated.
+printf 'var q=0\n' >> "$R2/f.js"                     # UNCOMMITTED code: the old commit gate blocked exactly this
+run 0 "git commit with unreviewed code → allow (gate moved off commit)" "$REVIEW_GATE" "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git -C $R2 commit -m x\"}}"
+git -C "$R2" checkout -q -- f.js
+run 2 "cd <repo> && gh pr create → BLOCK"              "$REVIEW_GATE" "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"cd $R2 && gh pr create --fill\"}}"
+run 2 "gh -R o/r pr create → BLOCK (global option before pr)" "$REVIEW_GATE" "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"cd $R2 && gh -R o/r pr create --fill\"}}"
+run 0 "cd <repo> && gh pr list → allow"                "$REVIEW_GATE" "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"cd $R2 && gh pr list\"}}"
+run 0 "git push --delete (sends no code) → allow"      "$REVIEW_GATE" "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git -C $R2 push origin --delete feat\"}}"
+run 0 "git push origin :feat (delete refspec) → allow" "$REVIEW_GATE" "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git -C $R2 push origin :feat\"}}"
+run 0 "git push --dry-run → allow"                     "$REVIEW_GATE" "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git -C $R2 push --dry-run\"}}"
+run 2 "commit && push in one cell → BLOCK"             "$REVIEW_GATE" "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git -C $R2 commit -qm x && git -C $R2 push -u origin master\"}}"
 # Global git options must not bypass the matcher (S256 review: the single-option
 # regex failed open on `-c`/`--no-pager`; confirmed exploitable). Both directions:
-run 2 "git -c k=v commit → still BLOCK (option-tokenizer)" "$REVIEW_GATE" "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git -c commit.gpgsign=false -C $R2 commit -m x\"}}"
-run 2 "git --no-pager commit → still BLOCK"            "$REVIEW_GATE" "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git --no-pager -C $R2 commit -m x\"}}"
-run 0 "git -c k=v log → non-commit still allowed"      "$REVIEW_GATE" "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git -c core.pager=cat -C $R2 log\"}}"
-# NEWLINE-separated commands (S184). This gate's commit detection had NO behavioural
-# coverage here beyond the syntax check at §0, and the shared matcher's segment class
-# excluded `| ; &` but not newline — so a two-line `git add …⏎git commit …` cell, the
-# form /wrap emits, silently sailed past the review gate for its whole life. Measured
-# pre-fix on unreviewed staged TypeScript with no flag: bare and `&&` forms exit 2,
-# newline form exit 0. Both directions asserted, so the fix stays "newline is a
-# separator" and never degrades into "block any cell mentioning git".
-run 2 "newline-separated add⏎commit → BLOCK"           "$REVIEW_GATE" "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git -C $R2 add -A\\ngit -C $R2 commit -m x\"}}"
-run 2 "newline add⏎status⏎commit -F - → BLOCK"          "$REVIEW_GATE" "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git -C $R2 add -A\\ngit -C $R2 status --short\\ngit -C $R2 commit -q -F -\"}}"
-run 0 "newline cell with NO commit → allow"            "$REVIEW_GATE" "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git -C $R2 add -A\\ngit -C $R2 diff --cached\"}}"
+run 2 "git -c k=v push → still BLOCK (option-tokenizer)" "$REVIEW_GATE" "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git -c push.default=current -C $R2 push\"}}"
+run 2 "git --no-pager push → still BLOCK"              "$REVIEW_GATE" "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git --no-pager -C $R2 push\"}}"
+run 0 "git -c k=v log → non-push still allowed"        "$REVIEW_GATE" "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git -c core.pager=cat -C $R2 log\"}}"
+# NEWLINE-separated commands (S184): the shared matcher once swallowed newlines, so a
+# multi-line cell — the form /wrap emits — sailed past. Both directions asserted.
+run 2 "newline-separated add⏎commit⏎push → BLOCK"      "$REVIEW_GATE" "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git -C $R2 add -A\\ngit -C $R2 commit -m x\\ngit -C $R2 push\"}}"
+run 0 "newline cell with NO push → allow"              "$REVIEW_GATE" "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git -C $R2 add -A\\ngit -C $R2 diff --cached\"}}"
 run 0 "no flag + skip valve → allow"                   "$REVIEW_GATE" "$J" CLAUDE_REVIEW_GATE_SKIP=1
+run 0 "inline skip prefix on gh pr create → allow"     "$REVIEW_GATE" "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"cd $R2 && CLAUDE_REVIEW_GATE_SKIP=1 gh pr create --fill\"}}"
 : > "$FLAG2"
 run 2 "empty/corrupt flag → BLOCK (fail-closed)"       "$REVIEW_GATE" "$J"
-H=$(git -C "$R2" diff HEAD | shasum -a 256 | cut -d' ' -f1)
-printf '{"repo":"%s","diffHash":"%s","verdict":"PASS","ts":"t"}' "$R2" "$H" > "$FLAG2"
+printf '{"repo":"%s","diffHash":"x","verdict":"PASS","ts":"t"}' "$R2" > "$FLAG2"
 run 2 "legacy S47 diffHash-only flag → BLOCK (no per-file coverage = whole diff unreviewed)" "$REVIEW_GATE" "$J"
 node "$WRITE_FLAG" --verdict PASS --repo "$R2" >/dev/null 2>&1
-run 0 "writer roundtrip: PASS flag + unchanged diff → allow" "$REVIEW_GATE" "$J"
-# DELTA PASS direction — the operator's two burn cases must flow WITHOUT re-review:
-printf '# notes\n' > "$R2/notes.md"; git -C "$R2" add notes.md
-run 0 "reviewed code + docs-only addition → allow (no re-review loop)" "$REVIEW_GATE" "$J"
-printf '{"evt":"wrap","step":6}\n' >> "$R2/skill-log.jsonl"
-run 0 "reviewed code + telemetry .jsonl append → allow (the every-wrap block, killed)" "$REVIEW_GATE" "$J"
-# DELTA BLOCK direction — genuinely new/changed code must still block:
-printf 'var c=3\n' > "$R2/g.js"; git -C "$R2" add g.js
-run 2 "reviewed code + NEW code file → BLOCK (delta has code)" "$REVIEW_GATE" "$J"
-git -C "$R2" rm -q --cached g.js; rm -f "$R2/g.js"
-printf 'var d=4\n' >> "$R2/f.js"
-run 2 "reviewed file EDITED after review → BLOCK (chunk hash changed)" "$REVIEW_GATE" "$J"
-printf 'var a=1\nvar b=2\n' > "$R2/f.js"               # byte-exact revert to reviewed state
-run 0 "edit reverted to reviewed bytes → allow (hash matches again)" "$REVIEW_GATE" "$J"
+run 0 "writer roundtrip: PASS flag + unchanged branch → allow" "$REVIEW_GATE" "$J"
+# Shell redirections are not refspecs (S84): the segment scan cuts at `&`, so `2>&1`
+# left a `2>` token that parsePush read as a source → "cannot resolve `2>`" false block.
+for RD in '2>&1' '>/dev/null 2>&1' '2>/dev/null' '> out.log' '2>> err.log'; do
+  run 0 "reviewed, push origin master $RD → allow (redirect is not a refspec)" "$REVIEW_GATE" "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git -C $R2 push origin master $RD\"}}"
+done
+# DELTA PASS direction — must flow WITHOUT re-review:
+printf '# notes\n' > "$R2/notes.md"; cm "$R2"
+run 0 "reviewed code + docs-only commit → allow (no re-review loop)" "$REVIEW_GATE" "$J"
+printf '{"evt":"wrap","step":6}\n' >> "$R2/skill-log.jsonl"; cm "$R2"
+run 0 "reviewed code + telemetry .jsonl commit → allow (the every-wrap block, killed)" "$REVIEW_GATE" "$J"
+# Only what is SENT counts: unreviewed code still sitting uncommitted does not block.
+printf 'var u=0\n' >> "$R2/f.js"
+run 0 "uncommitted unreviewed code, committed work reviewed → allow (not sent)" "$REVIEW_GATE" "$J"
+git -C "$R2" checkout -q -- f.js
+# DELTA BLOCK direction — genuinely new/changed committed code must still block:
+printf 'var c=3\n' > "$R2/g.js"; cm "$R2"
+run 2 "reviewed code + NEW code file committed → BLOCK" "$REVIEW_GATE" "$J"
+git -C "$R2" reset -q --hard HEAD~1
+printf 'var d=4\n' >> "$R2/f.js"; cm "$R2"
+run 2 "reviewed file EDITED + committed after review → BLOCK (chunk hash changed)" "$REVIEW_GATE" "$J"
+printf 'var a=1\nvar b=2\n' > "$R2/f.js"; cm "$R2"      # byte-exact revert to reviewed state
+run 0 "edit reverted to reviewed bytes → allow (branch diff matches again)" "$REVIEW_GATE" "$J"
+# THE everyday flow: /review sees UNCOMMITTED work, then it is committed, then pushed.
+printf 'var k=7\n' >> "$R2/f.js"
+node "$WRITE_FLAG" --verdict PASS --repo "$R2" >/dev/null 2>&1
+cm "$R2"
+run 0 "review uncommitted → commit → push → allow (writer covers base→worktree)" "$REVIEW_GATE" "$J"
 # --delta CLI mode (consumed by /review Step 3): must agree with the hook (P72 one source).
 D=$(node "$REVIEW_GATE" --delta --repo "$R2")
 case "$D" in *f.js*) fail "--delta after PASS: reviewed f.js excluded" "included" "excluded";; *) pass "--delta after PASS: reviewed f.js excluded";; esac
@@ -113,103 +202,208 @@ D=$(node "$REVIEW_GATE" --delta --repo "$R2")
 case "$D" in *h.js*) pass "--delta: new h.js included, delta-scoped";; *) fail "--delta: new h.js included" "missing" "included";; esac
 case "$D" in *f.js*) fail "--delta: f.js still excluded alongside new code" "included" "excluded";; *) pass "--delta: f.js still excluded alongside new code";; esac
 git -C "$R2" rm -q --cached h.js; rm -f "$R2/h.js"
+# --delta covers COMMITTED unpushed work too (the slice), not only the working tree:
+rm -f "$FLAG2"
+D=$(node "$REVIEW_GATE" --delta --repo "$R2")
+case "$D" in *f.js*) pass "--delta with no flag: committed unpushed f.js included";; *) fail "--delta with no flag: committed unpushed f.js included" "missing" "included";; esac
+node "$WRITE_FLAG" --verdict PASS --repo "$R2" >/dev/null 2>&1
 # REVISE blocks outright, even with an empty delta (must-fix items outstanding):
 node "$WRITE_FLAG" --verdict REVISE --repo "$R2" >/dev/null 2>&1
 run 2 "verdict REVISE → BLOCK (even with empty delta)"  "$REVIEW_GATE" "$J"
 node "$WRITE_FLAG" --verdict PASS --repo "$R2" >/dev/null 2>&1
-# Per-repo isolation: another repo's /review must NOT clobber this repo's flag
-# (the S255 cross-session wrap block). Old single-file design fails this.
+# Per-repo isolation: another repo's /review must NOT clobber this repo's flag (S255).
 R3=$(mktemp -d); git -C "$R3" init -q; git -C "$R3" config user.email t@t; git -C "$R3" config user.name t
-printf 'x=1\n' > "$R3/a.py"; git -C "$R3" add a.py; git -C "$R3" commit -qm base; printf 'y=2\n' >> "$R3/a.py"
+printf 'x=1\n' > "$R3/a.py"; cm "$R3" base; printf 'y=2\n' >> "$R3/a.py"
 node "$WRITE_FLAG" --verdict PASS --repo "$R3" >/dev/null 2>&1
 run 0 "flag survives another repo's review → allow (per-repo, no clobber)" "$REVIEW_GATE" "$J"
-FLAG3=$(node -e 'const m=require(process.env.HOME+"/.claude/skills/review/scripts/diff-chunks.js");console.log(m.flagPath(require("fs").realpathSync(process.argv[1])))' "$R3")
-rm -rf "$R3"; rm -f "$FLAG3"
-# Content-only commits need no flag at all (docs-only repos stop paying the /review turn):
-R4=$(mktemp -d); git -C "$R4" init -q; git -C "$R4" config user.email t@t; git -C "$R4" config user.name t
-printf 'hello\n' > "$R4/README.md"; git -C "$R4" add README.md; git -C "$R4" commit -qm base; printf 'more\n' >> "$R4/README.md"
-run 0 "docs-only diff, NO flag → allow (content-only delta)" "$REVIEW_GATE" "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git -C $R4 commit -m x\"}}"
-rm -rf "$R4"
-run 0 "non-commit → allow"                             "$REVIEW_GATE" '{"tool_name":"Bash","tool_input":{"command":"ls -la"}}'
-# tilde expansion: `git -C ~/x commit` must SCOPE (execFileSync doesn't expand ~;
-# pre-fix this fell through rev-parse failure to exit 0 = fail-open). Code diff +
-# no flag under the tilde-resolved repo must BLOCK — proves the tilde resolved.
+# No remote at all: no base to compare against → the whole history is the surface
+# (fails toward review). R3's flag covered only the uncommitted y=2 line... and its
+# base commit is code, so a push from R3 must BLOCK.
+FLAG3=$(flagof "$R3"); rm -f "$FLAG3"
+run 2 "repo with no origin + code history → BLOCK (empty-tree base, fail toward review)" "$REVIEW_GATE" "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git -C $R3 push\"}}"
+rm -rf "$R3"
+# FEATURE BRANCH: the surface is the whole branch vs the default branch, even after part
+# of it already reached the remote branch (the PR shows all of it).
+R7=$(mktemp -d); mkrepo "$R7"; printf 'hi\n' > "$R7/README.md"; cm "$R7" base; pushbase "$R7"
+git -C "$R7" checkout -q -b feat; printf 'def x; end\n' > "$R7/x.rb"; cm "$R7"
+git -C "$R7" push -q -u origin feat 2>/dev/null       # pushed outside the gate
+printf 'more\n' >> "$R7/README.md"; cm "$R7"
+J7="{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git -C $R7 push\"}}"
+run 2 "feature branch: code already on origin/feat but unreviewed → BLOCK (base = default branch)" "$REVIEW_GATE" "$J7"
+node "$WRITE_FLAG" --verdict PASS --repo "$R7" >/dev/null 2>&1
+run 0 "feature branch after /review → allow" "$REVIEW_GATE" "$J7"
+FLAG7=$(flagof "$R7"); rm -rf "$R7" "$R7.origin.git"; rm -f "$FLAG7"
+# Content-only pushes need no flag at all:
+R4=$(mktemp -d); mkrepo "$R4"; printf 'hello\n' > "$R4/README.md"; cm "$R4" base; pushbase "$R4"
+printf 'more\n' >> "$R4/README.md"; cm "$R4"
+run 0 "docs-only branch, NO flag → allow (content-only delta)" "$REVIEW_GATE" "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git -C $R4 push\"}}"
+rm -rf "$R4" "$R4.origin.git"
+run 0 "non-push → allow"                               "$REVIEW_GATE" '{"tool_name":"Bash","tool_input":{"command":"ls -la"}}'
+# tilde expansion: `git -C ~/x push` must SCOPE (execFileSync doesn't expand ~).
 FH="$(dirname "$R2")"
 rm -f "$FLAG2"
-printf 'var z=9\n' >> "$R2/f.js"
-run 2 "git -C ~/<repo> (tilde) + unreviewed code → BLOCK (tilde expanded, not fail-open)" "$REVIEW_GATE" "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git -C ~/$(basename "$R2") commit -m x\"}}" HOME="$FH"
+run 2 "git -C ~/<repo> (tilde) + unreviewed code → BLOCK (tilde expanded, not fail-open)" "$REVIEW_GATE" "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git -C ~/$(basename "$R2") push\"}}" HOME="$FH"
 
-# `cd <dir> && git commit` — the WORKTREE form (added 2026-08-01). A hook sees only the
-# command TEXT and cannot observe the cd, so this used to resolve process.cwd() and gate a
-# worktree commit against the SESSION's repo. Measured: a one-file docs commit in a linked
-# worktree was blocked by 13 unreviewed files that existed only in the primary worktree —
-# and the failure runs BOTH ways, since a clean session cwd would have let unreviewed code
-# through. Worktrees share one .git, so this is the normal shape of parallel-session work.
-#
-# The two cases below are a DISCRIMINATING PAIR, deliberately: same ambient cwd, opposite
-# expected exits, differing only in the cd target. If `cd` were ignored both would resolve
-# to cwd and return the SAME code, so at least one must fail — the assertion cannot pass
-# for the wrong reason regardless of what state the canary's own cwd repo happens to be in.
-R5=$(mktemp -d); git -C "$R5" init -q; git -C "$R5" config user.email t@t; git -C "$R5" config user.name t
-printf 'hello\n' > "$R5/README.md"; git -C "$R5" add README.md; git -C "$R5" commit -qm base
-printf 'more docs\n' >> "$R5/README.md"   # content-only delta ⇒ no flag needed ⇒ allow
-run 2 "cd <repo-with-unreviewed-code> && git commit → BLOCK (cd resolved, not cwd)" "$REVIEW_GATE" "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"cd $R2 && git commit -m x\"}}"
-run 0 "cd <docs-only-repo> && git commit → allow (same cwd, opposite verdict)"      "$REVIEW_GATE" "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"cd $R5 && git commit -m x\"}}"
-# A `cd` inside the commit MESSAGE must not redirect resolution — quoted spans are
-# stripped before scanning, and only a cd PRECEDING the git invocation counts.
-run 0 "cd <docs-repo> && git commit -m '…cd <code-repo>…' → allow (message cannot redirect)" "$REVIEW_GATE" "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"cd $R5 && git commit -m 'then cd $R2 && git commit'\"}}"
-# Precedence: an explicit `git -C` is the author saying where, and outranks any cd prefix.
-# Doubles as the nonexistent-path guard — a bogus cd must fall back, never disable the gate.
-run 2 "cd /nonexistent && git -C <code-repo> commit → BLOCK (-C wins; bogus cd falls back)" "$REVIEW_GATE" "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"cd /nonexistent-xyzzy && git -C $R2 commit -m x\"}}"
+# `cd <dir> && git push` — the WORKTREE form (2026-08-01). A hook sees only the command
+# TEXT and cannot observe the cd. DISCRIMINATING PAIR: same ambient cwd, opposite exits,
+# differing only in the cd target — if `cd` were ignored both would return the same code.
+R5=$(mktemp -d); mkrepo "$R5"
+printf 'hello\n' > "$R5/README.md"; cm "$R5" base; pushbase "$R5"
+printf 'more docs\n' >> "$R5/README.md"; cm "$R5"   # content-only delta ⇒ no flag needed ⇒ allow
+run 2 "cd <repo-with-unreviewed-code> && git push → BLOCK (cd resolved, not cwd)" "$REVIEW_GATE" "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"cd $R2 && git push\"}}"
+run 0 "cd <docs-only-repo> && git push → allow (same cwd, opposite verdict)"      "$REVIEW_GATE" "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"cd $R5 && git push\"}}"
+# A `cd` inside a commit MESSAGE must not redirect resolution.
+run 0 "cd <docs-repo> && git commit -m '…cd <code-repo>…' && git push → allow (message cannot redirect)" "$REVIEW_GATE" "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"cd $R5 && git commit -m 'then cd $R2 and push' && git push\"}}"
+# Precedence: explicit `git -C` outranks any cd prefix; a bogus cd falls back, never disables.
+run 2 "cd /nonexistent && git -C <code-repo> push → BLOCK (-C wins; bogus cd falls back)" "$REVIEW_GATE" "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"cd /nonexistent-xyzzy && git -C $R2 push\"}}"
 
-# `W=/abs; git -C "$W" commit` and `R=/abs; cd "$R"` (2026-09-15 fire audit, FP class B:
-# 7 fires checked the SESSION's repo because the hook saw the literal `$W`). Each pair
-# runs with the ambient cwd set to the repo the OLD code would have fallen back to, so
-# pre-fix both sides return the cwd verdict and one of each pair must go red.
-# `\$` keeps the variable literal all the way into the hook's JSON.
+# `W=/abs; git -C "$W" push` and `R=/abs; cd "$R"` (2026-09-15 fire audit, FP class B).
+# Each pair runs with cwd = the repo the OLD code would have fallen back to.
 runin(){ local d="$1"; shift; pushd "$d" >/dev/null; run "$@"; popd >/dev/null; }
 bc(){ printf '{"tool_name":"Bash","tool_input":{"command":"%s"}}' "$1"; }
-runin "$R5" 2 "cwd=docs, W=<code>; git -C \"\$W\" commit → BLOCK (var resolved)"     "$REVIEW_GATE" "$(bc "W=$R2; git -C \\\"\$W\\\" commit -m x")"
-runin "$R2" 0 "cwd=code, W=<docs>; git -C \"\$W\" commit → allow (same form, opposite)" "$REVIEW_GATE" "$(bc "W=$R5; git -C \\\"\$W\\\" commit -m x")"
-runin "$R5" 2 "W=<docs>; W=<code>; git -C \$W → BLOCK (last assignment wins)"          "$REVIEW_GATE" "$(bc "W=$R5; W=$R2; git -C \$W commit -m x")"
-runin "$R2" 0 "W=<code>; W=<docs>; git -C \$W → allow (last assignment wins)"          "$REVIEW_GATE" "$(bc "W=$R2; W=$R5; git -C \$W commit -m x")"
-runin "$R5" 2 "S=<parent>; R=\$S/<code>; git -C \"\$R\" → BLOCK (nested resolve)"         "$REVIEW_GATE" "$(bc "S=$FH; R=\\\"\$S/$(basename "$R2")\\\"; git -C \\\"\$R\\\" commit -m x")"
-runin "$R5" 2 "cwd=docs, R=<code>; cd \"\$R\" && git commit → BLOCK (cd var resolved)"   "$REVIEW_GATE" "$(bc "R=$R2; cd \\\"\$R\\\" && git commit -m x")"
-runin "$R2" 0 "cwd=code, R=<docs>; cd \"\$R\" && git commit → allow (opposite)"          "$REVIEW_GATE" "$(bc "R=$R5; cd \\\"\$R\\\" && git commit -m x")"
+runin "$R5" 2 "cwd=docs, W=<code>; git -C \"\$W\" push → BLOCK (var resolved)"     "$REVIEW_GATE" "$(bc "W=$R2; git -C \\\"\$W\\\" push")"
+runin "$R2" 0 "cwd=code, W=<docs>; git -C \"\$W\" push → allow (same form, opposite)" "$REVIEW_GATE" "$(bc "W=$R5; git -C \\\"\$W\\\" push")"
+runin "$R5" 2 "W=<docs>; W=<code>; git -C \$W → BLOCK (last assignment wins)"        "$REVIEW_GATE" "$(bc "W=$R5; W=$R2; git -C \$W push")"
+runin "$R2" 0 "W=<code>; W=<docs>; git -C \$W → allow (last assignment wins)"        "$REVIEW_GATE" "$(bc "W=$R2; W=$R5; git -C \$W push")"
+runin "$R5" 2 "S=<parent>; R=\$S/<code>; git -C \"\$R\" → BLOCK (nested resolve)"       "$REVIEW_GATE" "$(bc "S=$FH; R=\\\"\$S/$(basename "$R2")\\\"; git -C \\\"\$R\\\" push")"
+runin "$R5" 2 "cwd=docs, R=<code>; cd \"\$R\" && git push → BLOCK (cd var resolved)"   "$REVIEW_GATE" "$(bc "R=$R2; cd \\\"\$R\\\" && git push")"
+runin "$R2" 0 "cwd=code, R=<docs>; cd \"\$R\" && git push → allow (opposite)"          "$REVIEW_GATE" "$(bc "R=$R5; cd \\\"\$R\\\" && git push")"
 # Unresolvable forms keep the cwd fallback (never a guess, never exit-0-disabled):
-runin "$R2" 2 "W=\$(cmd); git -C \$W → cwd fallback BLOCK (command substitution not guessed)" "$REVIEW_GATE" "$(bc "W=\$(echo $R5); git -C \$W commit -m x")"
-runin "$R2" 2 "git -C \$W commit; W=<docs> → cwd fallback BLOCK (assignment AFTER use ignored)" "$REVIEW_GATE" "$(bc "git -C \$W commit -m x; W=$R5")"
-runin "$R2" 2 "W=/nonexistent; git -C \$W → cwd fallback BLOCK (non-dir never disables gate)" "$REVIEW_GATE" "$(bc "W=/nonexistent-xyzzy; git -C \$W commit -m x")"
-# Fail-open shapes from the 2026-09-15 review round (each exited 0 on the first cut of the
-# resolver). cwd is always the repo a WRONG guess would hide, so a regression reads 0.
-runin "$R5" 2 "W=\"\$S\"/<code> (quoted piece + suffix) → BLOCK (value not truncated to parent)" "$REVIEW_GATE" "$(bc "S=$FH; W=\\\"\$S\\\"/$(basename "$R2"); git -C \\\"\$W\\\" commit -m x")"
-runin "$R2" 2 "W=<parent-not-a-repo>; git -C \$W → cwd fallback BLOCK (resolved non-repo never exits 0)" "$REVIEW_GATE" "$(bc "W=$FH; git -C \$W commit -m x")"
-runin "$R2" 2 "W=<docs> git -C \"\$W\" (env-PREFIX form, bash expands \$W first) → BLOCK" "$REVIEW_GATE" "$(bc "W=$R5 git -C \\\"\$W\\\" commit -m x")"
-# The next four each put a `; W=` INSIDE the construct: a bare `( W=…` / `" W=…` / `# W=…` is
-# already refused by the command-start anchor, so those shapes could not tell whether the
-# quote, comment and group checks exist (both mutants survived until these were hardened).
-runin "$R2" 2 "(:; W=<docs>; true); git -C \$W (subshell assignment) → BLOCK"            "$REVIEW_GATE" "$(bc "(:; W=$R5; true); git -C \$W commit -m x")"
-runin "$R2" 2 "f(){ :; W=<docs>; }; git -C \$W (function body never run) → BLOCK"         "$REVIEW_GATE" "$(bc "f(){ :; W=$R5; }; git -C \$W commit -m x")"
-runin "$R2" 2 "echo \"x; W=<docs>; y\"; git -C \$W (assignment inside quotes) → BLOCK"    "$REVIEW_GATE" "$(bc "echo \\\"x; W=$R5; y\\\"; git -C \$W commit -m x")"
-runin "$R2" 2 "x=1 # ; W=<docs> ⏎ git -C \$W (commented-out assignment) → BLOCK"          "$REVIEW_GATE" "$(bc "x=1 # ; W=$R5\\ngit -C \$W commit -m x")"
-runin "$R2" 2 "W=<docs>; W+=/x; git -C \$W (append makes it unknown) → BLOCK"               "$REVIEW_GATE" "$(bc "W=$R5; W+=/x; git -C \$W commit -m x")"
-runin "$R5" 2 "G=/tmp/git-tools; R=<code>; cd \"\$R\" && git commit (git inside a path is not the command) → BLOCK" "$REVIEW_GATE" "$(bc "G=/tmp/git-tools; R=$R2; cd \\\"\$R\\\" && git commit -m x")"
-runin "$R5" 2 "W=<code>; git \\\\⏎ -C \"\$W\" commit (continuation-joined) → BLOCK"           "$REVIEW_GATE" "$(bc "W=$R2; git \\\\\\n -C \\\"\$W\\\" commit -m x")"
-# Classifier TIMEOUT (security review 2026-09-15): a pathological diff once took 75 s to classify and the
-# gate's execFileSync had no timeout, so every commit hung past the hook limit. A COPY of the gate beside a
-# classifier that never returns must BLOCK (cls null → fail toward review) within a few seconds.
+runin "$R2" 2 "W=\$(cmd); git -C \$W → cwd fallback BLOCK (command substitution not guessed)" "$REVIEW_GATE" "$(bc "W=\$(echo $R5); git -C \$W push")"
+runin "$R2" 2 "git -C \$W push; W=<docs> → cwd fallback BLOCK (assignment AFTER use ignored)" "$REVIEW_GATE" "$(bc "git -C \$W push; W=$R5")"
+runin "$R2" 2 "W=/nonexistent; git -C \$W → cwd fallback BLOCK (non-dir never disables gate)" "$REVIEW_GATE" "$(bc "W=/nonexistent-xyzzy; git -C \$W push")"
+runin "$R5" 2 "W=\"\$S\"/<code> (quoted piece + suffix) → BLOCK (value not truncated to parent)" "$REVIEW_GATE" "$(bc "S=$FH; W=\\\"\$S\\\"/$(basename "$R2"); git -C \\\"\$W\\\" push")"
+runin "$R2" 2 "W=<parent-not-a-repo>; git -C \$W → cwd fallback BLOCK (resolved non-repo never exits 0)" "$REVIEW_GATE" "$(bc "W=$FH; git -C \$W push")"
+runin "$R2" 2 "W=<docs> git -C \"\$W\" (env-PREFIX form, bash expands \$W first) → BLOCK" "$REVIEW_GATE" "$(bc "W=$R5 git -C \\\"\$W\\\" push")"
+runin "$R2" 2 "(:; W=<docs>; true); git -C \$W (subshell assignment) → BLOCK"            "$REVIEW_GATE" "$(bc "(:; W=$R5; true); git -C \$W push")"
+runin "$R2" 2 "f(){ :; W=<docs>; }; git -C \$W (function body never run) → BLOCK"         "$REVIEW_GATE" "$(bc "f(){ :; W=$R5; }; git -C \$W push")"
+runin "$R2" 2 "echo \"x; W=<docs>; y\"; git -C \$W (assignment inside quotes) → BLOCK"    "$REVIEW_GATE" "$(bc "echo \\\"x; W=$R5; y\\\"; git -C \$W push")"
+runin "$R2" 2 "x=1 # ; W=<docs> ⏎ git -C \$W (commented-out assignment) → BLOCK"          "$REVIEW_GATE" "$(bc "x=1 # ; W=$R5\\ngit -C \$W push")"
+runin "$R2" 2 "W=<docs>; W+=/x; git -C \$W (append makes it unknown) → BLOCK"               "$REVIEW_GATE" "$(bc "W=$R5; W+=/x; git -C \$W push")"
+runin "$R5" 2 "G=/tmp/git-tools; R=<code>; cd \"\$R\" && git push (git inside a path is not the command) → BLOCK" "$REVIEW_GATE" "$(bc "G=/tmp/git-tools; R=$R2; cd \\\"\$R\\\" && git push")"
+runin "$R5" 2 "W=<code>; git \\\\⏎ -C \"\$W\" push (continuation-joined) → BLOCK"           "$REVIEW_GATE" "$(bc "W=$R2; git \\\\\\n -C \\\"\$W\\\" push")"
+# Classifier TIMEOUT (security review 2026-09-15): a COPY of the gate beside a classifier
+# that never returns must BLOCK (cls null → fail toward review) within a few seconds.
 GT=$(mktemp -d); mkdir -p "$GT/skills/review/scripts" "$GT/hooks/lib"
 cp "$REVIEW_GATE" "$(dirname "$REVIEW_GATE")/diff-chunks.js" "$GT/skills/review/scripts/"
 cp "$HOOKS/lib/hook-input.js" "$GT/hooks/lib/"
 printf 'setInterval(() => {}, 1000);\n' > "$GT/skills/review/scripts/classify-diff.js"
 T0G=$(date +%s)
-run 2 "classifier hangs → gate BLOCKS on its timeout (never hangs the commit)" "$GT/skills/review/scripts/check-review-gate.js" "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git -C $R5 commit -m x\"}}"
+run 2 "classifier hangs → gate BLOCKS on its timeout (never hangs the push)" "$GT/skills/review/scripts/check-review-gate.js" "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git -C $R5 push\"}}"
 [ $(( $(date +%s) - T0G )) -le 6 ] && pass "hung classifier: gate returns in ≤6 s" || fail "hung classifier: gate returns in ≤6 s" "$(( $(date +%s) - T0G ))s" "≤6s"
 rm -rf "$GT"
-rm -rf "$R5"
-FLAG5=$(node -e 'const m=require(process.env.HOME+"/.claude/skills/review/scripts/diff-chunks.js");console.log(m.flagPath(process.argv[1]))' "$R5" 2>/dev/null); [ -n "${FLAG5:-}" ] && rm -f "$FLAG5"
+# ---- S81 review round: holes the 5-reviewer slate reproduced against the first cut ----
+# (R2 here: no flag, unreviewed committed code; R5: docs-only. Every BLOCK case below
+# exited 0 on the first cut.)
+# gh spellings the anchored regex missed:
+gh2(){ printf '{"tool_name":"Bash","tool_input":{"command":"cd %s && %s"}}' "$R2" "$1"; }
+run 2 "gh pr new (alias of create) → BLOCK"            "$REVIEW_GATE" "$(gh2 'gh pr new --fill')"
+run 2 "gh pr -R o/r create → BLOCK"                    "$REVIEW_GATE" "$(gh2 'gh pr -R o/r create --fill')"
+run 2 "env gh pr create → BLOCK"                       "$REVIEW_GATE" "$(gh2 'env gh pr create --fill')"
+run 2 "command gh pr create → BLOCK"                   "$REVIEW_GATE" "$(gh2 'command gh pr create --fill')"
+run 2 "if true; then gh pr create; fi → BLOCK"         "$REVIEW_GATE" "$(gh2 'if true; then gh pr create --fill; fi')"
+run 0 "gh pr list --search create → allow (create is a value, not the subcommand)" "$REVIEW_GATE" "$(gh2 'gh pr list --search create')"
+# cd tied to the PUSH, not to the first git word; subshell cd:
+runin "$R5" 2 "git status && cd <code> && git push → BLOCK (cd before the push counts)" "$REVIEW_GATE" "$(bc "git status && cd $R2 && git push")"
+runin "$R5" 2 "(cd <code> && git push) → BLOCK (subshell cd)" "$REVIEW_GATE" "$(bc "(cd $R2 && git push)")"
+runin "$R2" 0 "(cd <docs> && git push) → allow (subshell cd, opposite)" "$REVIEW_GATE" "$(bc "(cd $R5 && git push)")"
+# NON-HEAD refspecs: the push sends a branch that is not checked out.
+R8=$(mktemp -d); mkrepo "$R8"; printf 'hi\n' > "$R8/README.md"; cm "$R8" base; pushbase "$R8"
+git -C "$R8" checkout -q -b feat; printf 'var evil=1\n' > "$R8/evil.js"; cm "$R8"; git -C "$R8" checkout -q master
+p8(){ printf '{"tool_name":"Bash","tool_input":{"command":"git -C %s push %s"}}' "$R8" "$1"; }
+run 2 "on clean master: git push origin feat → BLOCK (refspec source, not HEAD)" "$REVIEW_GATE" "$(p8 'origin feat')"
+run 2 "git push origin feat:master → BLOCK"            "$REVIEW_GATE" "$(p8 'origin feat:master')"
+run 2 "git push origin +feat:master → BLOCK"           "$REVIEW_GATE" "$(p8 'origin +feat:master')"
+run 2 "git push --all origin → BLOCK"                  "$REVIEW_GATE" "$(p8 '--all origin')"
+run 2 "git push origin : (matching push) → BLOCK"      "$REVIEW_GATE" "$(p8 'origin :')"
+run 2 "git push -o -n origin feat (-n is an option VALUE) → BLOCK" "$REVIEW_GATE" "$(p8 '-o -n origin feat')"
+run 2 "git push --push-option -d origin feat → BLOCK"  "$REVIEW_GATE" "$(p8 '--push-option -d origin feat')"
+run 2 "git push origin nosuchref → BLOCK (unresolvable source fails toward review)" "$REVIEW_GATE" "$(p8 'origin nosuchref')"
+run 0 "git push origin master (clean branch) → allow"  "$REVIEW_GATE" "$(p8 'origin master')"
+run 2 "gh pr create --head feat → BLOCK"               "$REVIEW_GATE" "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"cd $R8 && gh pr create --head feat --fill\"}}"
+run 2 "gh pr create --head me:feat → BLOCK"            "$REVIEW_GATE" "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"cd $R8 && gh pr create -H me:feat --fill\"}}"
+# Reviewed in its worktree, pushed by name from the primary checkout → allow.
+W8="$R8.wt"; git -C "$R8" worktree add -q "$W8" feat
+node "$WRITE_FLAG" --verdict PASS --repo "$W8" >/dev/null 2>&1
+run 0 "feat reviewed in its worktree, pushed by name from primary → allow" "$REVIEW_GATE" "$(p8 'origin feat')"
+FLAG8=$(flagof "$W8"); git -C "$R8" worktree remove --force "$W8"; rm -f "$FLAG8"; rm -rf "$R8" "$R8.origin.git"
+# COMMIT + PUSH in one cell: the commit has not happened when the gate runs.
+R9=$(mktemp -d); mkrepo "$R9"; printf 'var a=1\n' > "$R9/f.js"; printf 'hi\n' > "$R9/README.md"; cm "$R9" base; pushbase "$R9"
+printf 'var evil=2\n' >> "$R9/f.js"
+run 2 "commit -am && push, code only uncommitted → BLOCK (worktree surface)" "$REVIEW_GATE" "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git -C $R9 commit -qam x && git -C $R9 push\"}}"
+run 0 "same code uncommitted, push alone → allow (not sent)" "$REVIEW_GATE" "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git -C $R9 push\"}}"
+git -C "$R9" checkout -q -- f.js; printf 'var n=1\n' > "$R9/n.js"
+run 2 "add -A && commit && push with NEW untracked code → BLOCK" "$REVIEW_GATE" "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git -C $R9 add -A && git -C $R9 commit -qm x && git -C $R9 push\"}}"
+rm -f "$R9/n.js"; printf 'more\n' >> "$R9/README.md"
+run 0 "add -A && commit && push, docs only → allow"    "$REVIEW_GATE" "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git -C $R9 add -A && git -C $R9 commit -qm x && git -C $R9 push\"}}"
+rm -rf "$R9" "$R9.origin.git"
+# Dangling origin/HEAD falls back to origin/master instead of the whole repo:
+R10=$(mktemp -d); mkrepo "$R10"; printf 'var l=1\n' > "$R10/lib.js"; cm "$R10" base; pushbase "$R10"
+git -C "$R10" symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main
+printf '# d\n' > "$R10/doc.md"; cm "$R10"
+run 0 "origin/HEAD dangling → falls back to origin/master; docs-only push → allow" "$REVIEW_GATE" "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git -C $R10 push\"}}"
+rm -rf "$R10" "$R10.origin.git"
+# No remote: /review --delta keeps the old uncommitted-only surface (no whole-repo review).
+R11=$(mktemp -d); git -C "$R11" init -q; git -C "$R11" config user.email t@t; git -C "$R11" config user.name t
+printf 'x=1\n' > "$R11/a.py"; printf 'y=1\n' > "$R11/b.py"; cm "$R11" base; printf 'x=2\n' >> "$R11/a.py"
+D=$(node "$REVIEW_GATE" --delta --repo "$R11")
+case "$D" in *b.py*) fail "no remote: --delta excludes committed b.py" "included" "excluded";; *a.py*) pass "no remote: --delta excludes committed b.py";; *) fail "no remote: --delta excludes committed b.py" "empty" "a.py only";; esac
+rm -rf "$R11"
 
-rm -rf "$R2"; rm -f "$FLAG2"
+# Heredoc BODIES that merely mention a send (S81 live: the fix-round commit message
+# quoted `gh pr create --head X` and the gate blocked the COMMIT on "cannot resolve X").
+# Bodies are blanked only when the terminator is found exactly; anything unsure stays
+# scannable (fail closed). Each BLOCK case is a shape where blanking too much would
+# hide a real send.
+hd(){ printf '{"tool_name":"Bash","tool_input":{"command":"%s"}}' "$1"; }
+run 0 "commit -F - heredoc body mentioning git push / gh pr create --head X → allow" "$REVIEW_GATE" "$(hd "git -C $R2 commit -F - <<'EOF'\\nthen git push origin nosuch\\nand gh pr create --head X\\nEOF")"
+run 2 "heredoc commit, then a REAL push after the terminator → BLOCK" "$REVIEW_GATE" "$(hd "git -C $R2 commit -F - <<'EOF'\\nmsg\\nEOF\\ngit -C $R2 push")"
+run 2 "unterminated heredoc → body stays scannable → BLOCK" "$REVIEW_GATE" "$(hd "cat <<EOF\\ngit -C $R2 push")"
+run 2 "indented terminator, no real one → unterminated → BLOCK" "$REVIEW_GATE" "$(hd "cat <<EOF\\n  EOF\\ngit -C $R2 push")"
+run 0 "indented '  EOF' does not close <<EOF; body runs to the real EOF → allow" "$REVIEW_GATE" "$(hd "cat <<EOF\\n  EOF\\ngit -C $R2 push\\nEOF")"
+run 2 "quoted \\\"<<EOF\\\" is not a heredoc → BLOCK"      "$REVIEW_GATE" "$(hd "echo \\\"<<EOF\\\"\\ngit -C $R2 push\\nEOF")"
+run 2 "commented # <<EOF is not a heredoc → BLOCK"        "$REVIEW_GATE" "$(hd "true # <<EOF\\ngit -C $R2 push\\nEOF")"
+run 0 "<<-EOF closes on a TAB-indented terminator → allow" "$REVIEW_GATE" "$(hd "cat <<-EOF\\ngit -C $R2 push\\n\\tEOF")"
+run 2 "<<-EOF does NOT close on a SPACE-indented terminator → BLOCK" "$REVIEW_GATE" "$(hd "cat <<-EOF\\ngit -C $R2 push\\n  EOF")"
+run 2 "two heredocs on one line: second body ends, then real push → BLOCK" "$REVIEW_GATE" "$(hd "cat <<A <<B\\nx\\nA\\ny\\nB\\ngit -C $R2 push")"
+run 0 "two heredocs on one line, push only inside bodies → allow" "$REVIEW_GATE" "$(hd "cat <<A <<B\\ngit -C $R2 push\\nA\\ngit -C $R2 push\\nB")"
+
+# ---- S81 re-check round (adversarial reviewer, fix round cc3b527) ----
+# Same-cell state changes BEFORE the send: the hook runs before any of them happen.
+R12=$(mktemp -d); mkrepo "$R12"; printf 'var a=1\n' > "$R12/f.js"; printf 'hi\n' > "$R12/README.md"; cm "$R12" base; pushbase "$R12"
+git -C "$R12" checkout -q -b feat; printf 'd\n' > "$R12/doc.md"; cm "$R12"; git -C "$R12" checkout -q master
+printf 'var evil=1\n' >> "$R12/f.js"
+run 2 "checkout feat && commit -am && push origin feat (uncommitted code carried over) → BLOCK" "$REVIEW_GATE" "$(hd "cd $R12 && git checkout feat && git commit -qam x && git push origin feat")"
+git -C "$R12" checkout -q -- f.js; printf 'more\n' >> "$R12/README.md"
+run 0 "checkout -b new && add && commit && push -u origin new, docs only → allow (branch not yet created)" "$REVIEW_GATE" "$(hd "cd $R12 && git checkout -b newb && git add -A && git commit -qm d && git push -u origin newb")"
+printf 'var z=1\n' >> "$R12/f.js"
+run 2 "checkout -b new && commit -am && push origin new, code → BLOCK" "$REVIEW_GATE" "$(hd "cd $R12 && git checkout -b newb && git commit -qam d && git push -u origin newb")"
+git -C "$R12" checkout -q -- f.js README.md
+# A same-cell commit must not HIDE committed code by switching to the worktree view.
+printf 'var c=2\n' >> "$R12/f.js"; cm "$R12"; git -C "$R12" show HEAD~1:f.js > "$R12/f.js"
+run 2 "unpushed code commit, worktree reverted, commit --allow-empty && push → BLOCK (committed still checked)" "$REVIEW_GATE" "$(hd "git -C $R12 commit --allow-empty -qm x && git -C $R12 push")"
+git -C "$R12" checkout -q -- f.js; git -C "$R12" reset -q --hard HEAD~1
+# --follow-tags sends only annotated tags reachable from what is pushed — not every unmerged tag.
+git -C "$R12" checkout -q -b rel; printf 'var r=1\n' > "$R12/r.js"; cm "$R12"; git -C "$R12" tag v0.9; git -C "$R12" checkout -q master
+printf 'd2\n' > "$R12/d2.md"; cm "$R12"
+run 0 "push --follow-tags with an old unmerged lightweight tag, docs-only branch → allow" "$REVIEW_GATE" "$(hd "git -C $R12 push --follow-tags")"
+run 2 "push --tags still checks unmerged tags → BLOCK" "$REVIEW_GATE" "$(hd "git -C $R12 push --tags")"
+# A tag created in the same cell resolves to what it will point at (automate-me 2026-10-24).
+run 0 "tag (docs-only HEAD) && push that tag → allow" "$REVIEW_GATE" "$(hd "git -C $R12 tag v1.0 && git -C $R12 push origin v1.0")"
+run 2 "tag -a -m msg on unreviewed code && push that tag → BLOCK" "$REVIEW_GATE" "$(hd "git -C $R12 tag -a v1.1 -m rel rel && git -C $R12 push origin v1.1")"
+run 2 "push a tag that nothing creates → BLOCK (unresolvable)" "$REVIEW_GATE" "$(hd "git -C $R12 push origin v9.9")"
+rm -rf "$R12" "$R12.origin.git"
+# Heredoc shapes where blanking would hide a command bash RUNS (each verified with bash):
+run 2 "marker line ending in a backslash continues the command → BLOCK" "$REVIEW_GATE" "$(hd "cat <<EOF \\\\\\n\\u0026\\u0026 git -C $R2 push\\nbody\\nEOF")"
+run 2 "<<EOF inside a multi-line quoted string → BLOCK"   "$REVIEW_GATE" "$(hd "echo \\\"start\\n<<EOF\\\"\\ngit -C $R2 push\\nEOF")"
+run 2 "quote opened AFTER the marker stays open past the line → BLOCK" "$REVIEW_GATE" "$(hd "echo \\\"a\\n<<EOF b\\\"\\ngit -C $R2 push\\nEOF")"
+run 2 "<< as an arithmetic shift → BLOCK"                "$REVIEW_GATE" "$(hd "echo \$((1<<2))\\ngit -C $R2 push\\n2")"
+run 2 "mixed-quote delimiter 'EOF'x → BLOCK"              "$REVIEW_GATE" "$(hd "cat <<'EOF'x\\nhi\\nEOFx\\ngit -C $R2 push\\nEOF")"
+
+FLAG5=$(flagof "$R5" 2>/dev/null); [ -n "${FLAG5:-}" ] && rm -f "$FLAG5"
+rm -rf "$R5" "$R5.origin.git"
+
+rm -rf "$R2" "$R2.origin.git"; rm -f "$FLAG2"
 
 echo "== 3. eval-first (stdin wiring + block, temp repo) =="
 R=$(mktemp -d); ( cd "$R" && git init -q && git config user.email t@t && git config user.name t && printf 'x' > a.js && git add a.js )
@@ -221,7 +415,50 @@ gota=$(cd "$R" && printf '%s' '{"tool_name":"Bash","tool_input":{"command":"git 
 [ "$gota" = 0 ] && pass "test file present → allow" || fail "test file present → allow" "$gota" 0
 rm -rf "$R"
 
+# S81 replay trial: `git add X && git commit` in ONE cell (7/8 trial commits were shaped so) runs
+# the hook before the add, so the index is empty and the gate went dark; and a session working in
+# a SUBDIRECTORY made `git ls-files` (cwd-relative) find 0 tests in a repo holding 126.
+ef(){ local d="$1" cmd="$2"; (cd "$d" && printf '{"tool_name":"Bash","tool_input":{"command":"%s"}}' "$cmd" | CLAUDE_EVAL_FIRST_BLOCK=1 node "$HOOKS/check-eval-first.js" >/dev/null 2>&1; echo $?); }
+R=$(mktemp -d); ( cd "$R" && git init -q && git config user.email t@t && git config user.name t && printf 'x' > README.md && git add README.md && git commit -qm base && printf 'x=1' > src.py )
+[ "$(ef "$R" 'git add src.py && git commit -m x')" = 2 ] && pass "eval-first: add+commit in one cell, no tests → BLOCK" || fail "eval-first: add+commit in one cell, no tests → BLOCK" "$(ef "$R" 'git add src.py && git commit -m x')" 2
+[ "$(ef "$R" 'git add -A && git commit -m x')" = 2 ] && pass "eval-first: add -A+commit, no tests → BLOCK" || fail "eval-first: add -A+commit, no tests → BLOCK" "$(ef "$R" 'git add -A && git commit -m x')" 2
+[ "$(ef "$R" 'git add README.md && git commit -m x')" = 0 ] && pass "eval-first: same cell adds only docs → allow" || fail "eval-first: same cell adds only docs → allow" "$(ef "$R" 'git add README.md && git commit -m x')" 0
+rm -rf "$R"
+R=$(mktemp -d); ( cd "$R" && git init -q && git config user.email t@t && git config user.name t && mkdir -p tests src && printf 'assert 1' > tests/test_x.py && git add -A && git commit -qm base && printf 'x=1' > src/a.py && git add src/a.py )
+[ "$(ef "$R/src" 'git commit -m x')" = 0 ] && pass "eval-first: cwd in a SUBDIRECTORY still sees root tests → allow" || fail "eval-first: cwd in a SUBDIRECTORY still sees root tests → allow" "$(ef "$R/src" 'git commit -m x')" 0
+rm -rf "$R"
+
+# Review of 18d86ef (adversarial, reproduced): an unrelated add narrowed `commit -a` to the add's
+# paths; the same-cell query ran from a subdirectory; `-A <path>` and `-u` were read as whole-tree
+# with untracked; an add in ANOTHER repo counted here. Repo: no tests, tracked lib/b.py modified,
+# untracked scratch.py, docs/ with a modified README.
+R=$(mktemp -d); ( cd "$R" && git init -q && git config user.email t@t && git config user.name t && mkdir -p lib docs sub && printf 'x=1' > lib/b.py && printf 'd' > docs/README.md && printf 'k' > sub/keep.txt && git add -A && git commit -qm base && printf 'x=2' > lib/b.py && printf 'd2' > docs/README.md && printf 's' > scratch.py )
+O=$(mktemp -d); ( cd "$O" && git init -q )
+[ "$(ef "$R" 'git add docs/README.md && git commit -am docs')" = 2 ] && pass "eval-first: unrelated add does not narrow commit -a → BLOCK" || fail "eval-first: add + commit -am → BLOCK" "$(ef "$R" 'git add docs/README.md && git commit -am docs')" 2
+[ "$(ef "$R/sub" 'git commit -am x')" = 2 ] && pass "eval-first: commit -am from a SUBDIRECTORY sees the whole tree → BLOCK" || fail "eval-first: subdir commit -am → BLOCK" "$(ef "$R/sub" 'git commit -am x')" 2
+[ "$(ef "$R/sub" 'git add -A && git commit -m x')" = 2 ] && pass "eval-first: add -A from a SUBDIRECTORY sees the whole tree → BLOCK" || fail "eval-first: subdir add -A → BLOCK" "$(ef "$R/sub" 'git add -A && git commit -m x')" 2
+[ "$(ef "$R" 'git add -A docs/ && git commit -m x')" = 0 ] && pass "eval-first: add -A <dir> stages only that dir → allow" || fail "eval-first: add -A docs/ → allow" "$(ef "$R" 'git add -A docs/ && git commit -m x')" 0
+( cd "$R" && git checkout -q -- lib/b.py )
+[ "$(ef "$R" 'git add -u && git commit -m x')" = 0 ] && pass "eval-first: add -u ignores UNTRACKED source → allow" || fail "eval-first: add -u → allow" "$(ef "$R" 'git add -u && git commit -m x')" 0
+[ "$(ef "$R" "git -C $O add . && git commit -m x")" = 0 ] && pass "eval-first: an add in ANOTHER repo does not count here → allow" || fail "eval-first: other-repo add → allow" "$(ef "$R" "git -C $O add . && git commit -m x")" 0
+rm -rf "$R" "$O"
+
 echo "== 4. anticheat (stdin wiring + RSpec pattern, temp repo) =="
+acc(){ local cmd="$1" R got; R=$(mktemp -d); ( cd "$R" && git init -q && git config user.email t@t && git config user.name t && : > plan.md \
+    && printf '    assert total == 56\n' > test_a.py && git add -A && git commit -qm base && printf '    assert total >= 0\n' > test_a.py && printf 'n' > notes.txt )
+  got=$(cd "$R" && printf '{"tool_name":"Bash","tool_input":{"command":"%s"}}' "$cmd" | CLAUDE_ANTICHEAT_BLOCK=1 node "$HOOKS/check-anticheat.js" >/dev/null 2>&1; echo $?); rm -rf "$R"; echo "$got"; }
+[ "$(acc 'git add -A && git commit -m x')" = 2 ] && pass "anticheat: weakening staged by add -A in the SAME cell → BLOCK" || fail "anticheat: add -A same cell → BLOCK" "$(acc 'git add -A && git commit -m x')" 2
+# The block message must name the override, or the agent retries unchanged (automate-me 2026-10-24: ~10 of 18 blocks).
+accmsg(){ local R; R=$(mktemp -d); ( cd "$R" && git init -q && git config user.email t@t && git config user.name t && : > plan.md \
+    && printf '    assert total == 56\n' > test_a.py && git add -A && git commit -qm base && printf '    assert total >= 0\n' > test_a.py && git add -A )
+  (cd "$R" && printf '{"tool_name":"Bash","tool_input":{"command":"git commit -m x"}}' | CLAUDE_ANTICHEAT_BLOCK=1 node "$HOOKS/check-anticheat.js" 2>&1 >/dev/null); rm -rf "$R"; }
+accmsg | grep -q 'ANTICHEAT-OK: <one-line reason>' && pass "anticheat: block message names the override" || fail "anticheat: block message names the override" "$(accmsg | tail -3)" "ANTICHEAT-OK"
+[ "$(acc 'git add test_a.py && git commit -m x')" = 2 ] && pass "anticheat: weakening staged by pathspec add in the same cell → BLOCK" || fail "anticheat: pathspec add same cell → BLOCK" "$(acc 'git add test_a.py && git commit -m x')" 2
+[ "$(acc 'git commit -am x')" = 2 ] && pass "anticheat: commit -am picks up the weakening → BLOCK" || fail "anticheat: commit -am → BLOCK" "$(acc 'git commit -am x')" 2
+[ "$(acc 'git add notes.txt && git commit -am x')" = 2 ] && pass "anticheat: unrelated add does not narrow commit -am → BLOCK" || fail "anticheat: add + commit -am → BLOCK" "$(acc 'git add notes.txt && git commit -am x')" 2
+[ "$(acc 'git commit -m x -- test_a.py')" = 2 ] && pass "anticheat: commit -- <path> commits that path → BLOCK" || fail "anticheat: commit -- path → BLOCK" "$(acc 'git commit -m x -- test_a.py')" 2
+[ "$(acc 'git add -A notes.txt && git commit -m x')" = 0 ] && pass "anticheat: add -A <unrelated path> → allow" || fail "anticheat: add -A notes.txt → allow" "$(acc 'git add -A notes.txt && git commit -m x')" 0
+[ "$(acc 'git add notes.txt && git commit -m x')" = 0 ] && pass "anticheat: same cell adds an UNRELATED file only → allow" || fail "anticheat: unrelated add → allow" "$(acc 'git add notes.txt && git commit -m x')" 0
 R=$(mktemp -d); ( cd "$R" && git init -q && git config user.email t@t && git config user.name t && : > plan.md && printf 'it "x" do\n  expect(a).to eq(1)\nend\n' > model_spec.rb && git add model_spec.rb && git commit -qm base && printf 'it "x" do\nend\n' > model_spec.rb && git add model_spec.rb )
 gotr=$(cd "$R" && printf '%s' '{"tool_name":"Bash","tool_input":{"command":"git commit -m x"}}' | CLAUDE_ANTICHEAT_BLOCK=1 node "$HOOKS/check-anticheat.js" >/dev/null 2>&1; echo $?)
 [ "$gotr" = 2 ] && pass "removed RSpec assertion, BLOCK=1 → BLOCK" || fail "removed RSpec assertion, BLOCK=1 → BLOCK" "$gotr" 2

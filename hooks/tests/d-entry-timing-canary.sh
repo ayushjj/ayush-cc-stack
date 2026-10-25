@@ -11,6 +11,10 @@
 set -uo pipefail
 
 HOOK="$HOME/.claude/hooks/check-d-entry-timing.js"
+# settings.json sets CLAUDE_D_ENTRY_TIMING_WARN_ONLY=1 for every session (S81), and the
+# harness passes it to this script. The block-mode cases need it unset; cases that want
+# warn-only set it explicitly.
+unset CLAUDE_D_ENTRY_TIMING_WARN_ONLY
 TMP="$(mktemp -d)"
 
 # ONE cleanup, registered ONCE. Each mutation section appends its file to $MUTANTS
@@ -177,6 +181,19 @@ rc=$(printf '{"tool_input":{"command":"git -C %s commit -m x"}}' "$r" \
 rc=$(printf '{"tool_input":{"command":"git -C %s commit -m x"}}' "$r" \
       | CLAUDE_D_ENTRY_TIMING_WARN_ONLY=1 node "$HOOK" >/dev/null 2>&1; echo $?)
 [ "$rc" = "0" ] && ok "WARN_ONLY=1 allows" || bad "WARN_ONLY=1 expected 0, got $rc"
+# S81: warn-only is now the default (owner OK; replay trial: Opus authored D-entries at decision
+# time 6/6 and the block fired on all 6 correct commits). Exit-0 stderr never reaches the model,
+# so the warning must ride stdout additionalContext (hooks/lib/hook-input.js warnModel).
+out=$(printf '{"tool_input":{"command":"git -C %s commit -m x"}}' "$r" \
+      | CLAUDE_D_ENTRY_TIMING_WARN_ONLY=1 node "$HOOK" 2>/dev/null)
+printf '%s' "$out" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const h=JSON.parse(s).hookSpecificOutput;process.exit(h&&/D-ENTRY|D146/.test(h.additionalContext)?0:1)}catch{process.exit(1)}})' \
+  && ok "WARN_ONLY=1 warning reaches the model (additionalContext)" || bad "WARN_ONLY=1 warning not on the model channel: ${out:0:120}"
+out=$(printf '{"tool_input":{"command":"git -C %s commit -m x"}}' "$r" | env -u CLAUDE_D_ENTRY_TIMING_WARN_ONLY node "$HOOK" 2>/dev/null)
+[ -z "$out" ] && ok "block mode leaves stdout empty (stderr + exit 2 only)" || bad "block mode wrote stdout: ${out:0:120}"
+LOG="$HOME/.claude/.hook-overrides.log"; before=$(wc -l < "$LOG" 2>/dev/null || echo 0)
+printf '{"tool_input":{"command":"git -C %s commit -m x"}}' "$r" | CLAUDE_D_ENTRY_TIMING_WARN_ONLY=1 node "$HOOK" >/dev/null 2>&1
+after=$(wc -l < "$LOG" 2>/dev/null || echo 0)
+[ "$before" = "$after" ] && ok "settings-default warn-only is NOT logged as an override" || bad "warn-only default wrote $((after-before)) override log line(s)"
 
 echo "== §8 TEETH: a mutant that ignores the wrap-artifact half must be CAUGHT =="
 # If the hook blocked on "new D-entry" alone, §2 (the decision-time commit we WANT)
@@ -383,12 +400,14 @@ printf '# S504\n' > "$r/learnings/2026-01-01-s504.md"
 rc=$(run_cmd "\"git -C $r commit -m first --allow-empty && git -C $r add -A && git -C $r commit -m wrap\"")
 [ "$rc" = "2" ] && ok "exit 2 — adds belonging to the SECOND commit are not dropped" || bad "expected 2, got $rc (DARK)"
 
-# A replay that matches nothing is as unevaluated as one that threw. Shell
-# redirections ride along in the parsed args and git SUCCEEDS with empty output.
+# A replay that matches nothing is as unevaluated as one that threw. The fixture
+# was `add -A 2>/dev/null` until 2026-10-15, when redirections stopped reaching the
+# replay (§16 now asserts that cell BLOCKS). A pathspec naming a file that does not
+# exist is the remaining honest zero-match: --ignore-missing makes git SUCCEED empty.
 r=$(new_repo redirection_arg)
 printf '\n### D505 — at wrap\n' >> "$r/docs/decisions.md"
 printf '# S505\n' > "$r/learnings/2026-01-01-s505.md"
-out=$(printf '{"tool_input":{"command":"git -C %s add -A 2>/dev/null && git -C %s commit -m wrap"}}' "$r" "$r" \
+out=$(printf '{"tool_input":{"command":"git -C %s add no-such-file.md && git -C %s commit -m wrap"}}' "$r" "$r" \
   | node "$HOOK" 2>&1 >/dev/null)
 case "$out" in *"matched no files"*) ok "a replay matching NOTHING is announced, not silent" ;;
   *) bad "zero-match replay produced no notice: '$out'" ;; esac
@@ -546,6 +565,37 @@ for h in '## D-series conventions' '## D — notes' '## D.1 x' '## Design' '## D
          '### D-API design notes' '## D-UI layout'; do
   i=$((i+1)); d_shape_case 0 "$h" "no$i"
 done
+
+echo "== §16 SHELL REDIRECTIONS on the add are not pathspecs (hook-review 2026-10-15) =="
+# scanGitSegments keeps redirect tokens in args, so `git add -A 2>/dev/null` replayed
+# as `add --dry-run -A 2>/dev/null` — a pathspec that matches nothing — and the gate
+# went dark with only a NOTE (measured: plain cell exit 2, redirected cell exit 0).
+# `&` cuts the segment, so `2>&1` arrives as a bare `2>`. Each cell leaves the index
+# EMPTY, so only the replay of the add can see the D-entry.
+i=0
+for RD in '2>/dev/null' '2> /dev/null' '>/dev/null 2>&1' '2>&1' '> add.log' '2>> err.log'; do
+  i=$((i+1)); r=$(new_repo "redir$i")
+  printf '\n### D300 — authored at wrap\n\nbody\n' >> "$r/docs/decisions.md"
+  printf '# S300\n' > "$r/learnings/2026-01-01-s300.md"
+  rc=$(run_cmd "$(node -e 'process.stdout.write(JSON.stringify(process.argv[1]))' "git -C $r add -A $RD && git -C $r commit -m wrap")")
+  [ "$rc" = "2" ] && ok "exit 2 — add -A $RD + commit" || bad "expected 2, got $rc — add -A $RD (DARK)"
+done
+r=$(new_repo redir_paths)
+printf '\n### D301 — authored at wrap\n\nbody\n' >> "$r/docs/decisions.md"
+printf '# S301\n' > "$r/learnings/2026-01-01-s301.md"
+rc=$(run_cmd "$(node -e 'process.stdout.write(JSON.stringify(process.argv[1]))' "git -C $r add docs/decisions.md learnings 2> /dev/null && git -C $r commit -m wrap")")
+[ "$rc" = "2" ] && ok "exit 2 — add <paths> 2> /dev/null (bare operator owns its target)" || bad "expected 2, got $rc — add <paths> 2> /dev/null (DARK)"
+# Both directions: stripping must not invent content — a decision-time commit stays allowed.
+r=$(new_repo redir_alone)
+printf '\n### D302 — authored when decided\n' >> "$r/docs/decisions.md"
+rc=$(run_cmd "$(node -e 'process.stdout.write(JSON.stringify(process.argv[1]))' "git -C $r add -A 2>/dev/null && git -C $r commit -m D302")")
+[ "$rc" = "0" ] && ok "exit 0 — decisions.md alone, add -A 2>/dev/null, still allowed" || bad "expected 0, got $rc (false block)"
+# The redirect TARGET must not be staged-as-pathspec: `> learnings/x.md` writes, it does not add.
+r=$(new_repo redir_target)
+printf '\n### D303 — authored when decided\n' >> "$r/docs/decisions.md"
+printf '# S303\n' > "$r/learnings/2026-01-01-s303.md"
+rc=$(run_cmd "$(node -e 'process.stdout.write(JSON.stringify(process.argv[1]))' "git -C $r add docs/decisions.md > learnings/2026-01-01-s303.md && git -C $r commit -m D303")")
+[ "$rc" = "0" ] && ok "exit 0 — redirect target is not replayed as a pathspec" || bad "expected 0, got $rc (redirect target read as pathspec)"
 
 echo
 printf 'passed %d, failed %d\n' "$pass" "$fail"

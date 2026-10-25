@@ -112,7 +112,7 @@ slow_probe() {
   # Capture NODE's exit code, not the pipeline's: a fail-open hook exits immediately,
   # the writer then hits a closed pipe, and pipefail would report SIGPIPE (141) —
   # a true failure with a false reason.
-  got=$( ( sleep 0.3; printf '%s' "$payload" ) \
+  got=$( ( sleep 1; printf '%s' "$payload" ) \
          | { env -u CLAUDE_TOOL_INPUT -u CLAUDE_CD_PERSISTENCE_SKIP \
                  -u CLAUDE_CD_PERSISTENCE_WARN_ONLY "$@" node "$hook" >/dev/null 2>&1; echo $?; } )
   if [ "$got" -eq "$want" ]; then
@@ -167,8 +167,9 @@ unset CLAUDE_TOOL_INPUT
 
 echo; echo "§6 SLOW-FIRST-BYTE RACE ${DIM}(the bug a fast pipe cannot see)${OFF}"
 # Self-proof FIRST: a reconstructed racing hook must fail open under slow_probe.
-# If it blocks, the 300ms delay no longer exceeds node's startup here and §6 is
-# a decorative always-green tripwire — report that as a FAILURE.
+# If it blocks, the 1s delay no longer exceeds node's startup here and §6 is
+# a decorative always-green tripwire — report that as a FAILURE. (Was 300ms until
+# 2026-10-25: under load node startup crossed it and the self-proof flaked ~2 in 5.)
 RACY="$SANDBOX/racy-reader.js"
 cat > "$RACY" <<'RACYHOOK'
 let raw = '';

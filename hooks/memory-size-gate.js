@@ -186,6 +186,7 @@ try {
   let payload = {};
   try { payload = raw.trim() ? JSON.parse(raw) : {}; } catch (_) {}
   const input = payload.tool_input || payload;
+  const warnings = [];   // emitted once at the end (see warnModel below)
   const filePath = input.file_path || '';
   if (!filePath) {
     process.exit(0);
@@ -243,7 +244,7 @@ try {
 
     if (projectedSize > softBytes) {
       const projKB = (projectedSize / 1024).toFixed(1);
-      process.stderr.write(
+      warnings.push(
         `[memory-size-gate] ${baseName} would become ${projKB}KB after this write ` +
         `(soft threshold ${softKB}KB). Consider /prune-memory when convenient. ` +
         `No block — write proceeding.\n`
@@ -263,7 +264,7 @@ try {
       if (rows.length) {
         const names = rows.slice(0, 2).map((r) => `"${r.snippet}…" (${r.len}c)`).join(', ');
         const more = rows.length > 2 ? ` (+${rows.length - 2} more)` : '';
-        process.stderr.write(
+        warnings.push(
           `[memory-size-gate] this CLAUDE.md write adds ${rows.length} oversized mistake-table ` +
           `row(s) (Pattern cell >${MISTAKE_ROW_CAP_CHARS} chars — an archive pointer does NOT ` +
           `exempt a row; ${rows.filter((r) => r.ptr).length} of these already carry one): ` +
@@ -277,7 +278,7 @@ try {
       if (princ.length) {
         const pn = princ.slice(0, 3).map((p) => `P${p.num}(${p.n}c)`).join(', ');
         const more = princ.length > 3 ? ` (+${princ.length - 3} more)` : '';
-        process.stderr.write(
+        warnings.push(
           `[memory-size-gate] this CLAUDE.md write adds ${princ.length} oversized principle ` +
           `entry(ies) (>${PARAGRAPH_PRINCIPLE_CAP_CHARS} chars with a substantial inline ` +
           `"Example:" and no "→ Full case detail" pointer — governance cap ` +
@@ -296,7 +297,7 @@ try {
       const kb = (bodyBytes / 1024).toFixed(1);
       const capKB = (LEARNINGS_SOFT_BYTES / 1024).toFixed(0);
       const claudeKB = (CLAUDE_SOFT_BYTES / 1024).toFixed(0);
-      process.stderr.write(
+      warnings.push(
         `[memory-size-gate] ${baseName} would be written at ${kb}KB. learnings/ files are ` +
         `"unbounded" per governance.md:156, but this ${capKB}KB soft ceiling = 80% of the ` +
         `${claudeKB}KB CLAUDE.md cap (the "~80% of cap" authoring aim). A single learnings file ` +
@@ -306,6 +307,12 @@ try {
     }
   }
 
+  // ONE emission for all layers: stdout must hold a single JSON object, and
+  // exit-0 stderr never reaches the model (S81 probe) — warnModel's channel does.
+  if (warnings.length) {
+    const text = warnings.join('');
+    try { require('./lib/hook-input.js').warnModel(text); } catch { process.stderr.write(text); }
+  }
   process.exit(0);
 } catch (err) {
   try {

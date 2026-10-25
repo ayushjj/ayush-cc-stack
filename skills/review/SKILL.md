@@ -1,6 +1,6 @@
 ---
 name: review
-description: Use before committing code changes to run type checks, structural validation, and parallel review agents. Auto-detects project language (Python, TypeScript, Ruby/Rails). Triggers on '/review', 'code review', 'review before commit', 'check code quality'.
+description: Use before pushing a slice or opening a PR to run type checks, structural validation, and parallel review agents. Auto-detects project language (Python, TypeScript, Ruby/Rails). Triggers on '/review', 'code review', 'review before commit', 'check code quality'.
 user_invocable: true
 ---
 
@@ -10,7 +10,7 @@ One-command code review that detects project type, runs appropriate checks, and 
 
 ## Trigger
 
-User runs `/review` before committing code changes. Also enforced by PreToolUse commit gate hook.
+User runs `/review` once per slice, before `git push` / `gh pr create` (owner rule, CLAUDE.md Gates). Enforced by the PreToolUse review gate, which fires on push and PR creation — **not** on commit (moved S81; per-commit is a self-check). The review surface is everything this branch adds since it left the default branch (`merge-base` with `origin/HEAD`), committed or not.
 
 ## Steps
 
@@ -82,10 +82,10 @@ node ~/.claude/skills/review/scripts/check-review-gate.js --delta --repo "$repo"
 This single invocation answers Steps 3, 4, **and 4.5** — `--tier` adds `tier`, `tierReason`, `signals`, and `slate` to the same JSON. Run it **once** and carry the result forward; do not re-derive any of it by hand.
 
 If `contentOnly` is `true` (the unreviewed code-file set is empty — everything standing was reviewed, or only docs, model-pins, lockfiles, `.gitignore`, timestamps, pure-data JSON/JSONL changed — none of them RENAMED from a code/exec path, and none granted an executable file mode):
-- Report: "Nothing unreviewed with execution semantics. No code review needed. Ready to commit."
+- Report: "Nothing unreviewed with execution semantics. No code review needed. Ready to push."
 - Skip to Step 8 (set flag, verdict PASS). **This is Tier 0** of the reviewer ladder (Step 4.5).
 
-Two things to know about the classifier: it **fails toward code** — anything ambiguous, unparseable, or error-ing comes back as CODE and falls through to review; and the delta reads `git diff HEAD`, so **`git add` any NEW files first** (untracked files are invisible to `git diff HEAD`, hence to the classifier and to the Step-8 flag alike).
+Two things to know about the classifier: it **fails toward code** — anything ambiguous, unparseable, or error-ing comes back as CODE and falls through to review; and the delta reads `git diff <branch-base>` (committed + uncommitted work since the branch left the default branch), so **`git add` any NEW files first** (untracked files are invisible to `git diff`, hence to the classifier and to the Step-8 flag alike).
 
 ### 4. Identify changed code files
 
@@ -173,8 +173,8 @@ Collect all agent findings and categorize:
 
 ### 7. Verdict
 
-- If zero **must fix** items: "Ready to commit."
-- Otherwise: List what needs to be addressed before committing.
+- If zero **must fix** items: "Ready to push."
+- Otherwise: List what needs to be addressed before pushing.
 
 ### 7.5. Apply findings BEFORE writing the flag
 
@@ -182,7 +182,7 @@ If findings are being applied (must-fix always; should-fix/consider per user), a
 
 ### 8. Set review gate flag (delta contract)
 
-After the verdict (and Step 7.5 applies), write the flag via the paired writer — it stores per-file chunk hashes of `git diff HEAD` at a per-repo path (P51 paired contract with `scripts/check-review-gate.js` via shared `scripts/diff-chunks.js`; contract row in governance.md "Skill-coupling contracts" — change both sides in lockstep):
+After the verdict (and Step 7.5 applies), write the flag via the paired writer — it stores per-file chunk hashes of `git diff <branch-base>` (base → working tree) at a per-repo path (P51 paired contract with `scripts/check-review-gate.js` via shared `scripts/diff-chunks.js`; contract row in governance.md "Skill-coupling contracts" — change both sides in lockstep):
 
 ```bash
 node ~/.claude/skills/review/scripts/write-review-flag.js \
@@ -191,7 +191,7 @@ node ~/.claude/skills/review/scripts/write-review-flag.js \
 # ← --verdict REVISE instead if must-fix items remain unapplied
 ```
 
-The commit gate then blocks ONLY on unreviewed CODE: new/changed code chunks since this flag block (and re-running /review scopes to just that delta); docs/telemetry/pure-data edits after the flag pass silently; a REVISE flag blocks all commits in the repo until must-fix items are addressed and /review re-runs. If NEW files are part of the change, `git add` them BEFORE running /review — untracked files enter `git diff HEAD` only once staged, and both the delta and the flag hash that diff.
+The push gate then compares what the push SENDS (`git diff <branch-base> HEAD`) against this flag and blocks ONLY on unreviewed CODE: new/changed code chunks since this flag block (and re-running /review scopes to just that delta); docs/telemetry/pure-data edits after the flag pass silently; uncommitted work is not part of a push and does not block it; a REVISE flag blocks every push/PR from the repo until must-fix items are addressed and /review re-runs. Commits are never blocked. If NEW files are part of the change, `git add` them BEFORE running /review — untracked files enter the diff only once staged, and both the delta and the flag hash that diff.
 
 ## Agent Selection Reference
 

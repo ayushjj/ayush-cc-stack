@@ -15,7 +15,6 @@ covers everything else in this repo; it does not claim these files.
 | `resolving-merge-conflicts` | `skills/engineering/resolving-merge-conflicts` | none |
 | `tdd` | `skills/engineering/tdd` | none |
 | `git-guardrails-claude-code` | `skills/misc/git-guardrails-claude-code` | none |
-| `setup-pre-commit` | `skills/misc/setup-pre-commit` | none |
 | `grill-me` | `skills/productivity/grill-me` | description rewritten; `effort: high` added |
 
 ---

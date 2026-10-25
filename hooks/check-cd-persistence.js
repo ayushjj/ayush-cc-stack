@@ -10,6 +10,7 @@
 //   - cd $HOME, cd ~, cd ~/...    (home, no surprise)
 //   - cd -                          (revert to previous)
 //   - cd /absolute/path             (absolute, no surprise)
+//   - cd $TMPDIR, cd $T              (var whose every assignment is absolute — see below)
 //   - (cd <rel> && cmd)             (subshell — cwd doesn't leak)
 //
 // Skip entirely: set CLAUDE_CD_PERSISTENCE_SKIP=1
@@ -81,8 +82,8 @@ let stripped = command;
 //      Of 28 such fires, every one that could be resolved pointed at an absolute path.
 //
 // The scanner below walks the string tracking quote state, so `cd` counts only as a
-// command word at quote depth 0. Returns `[{arg, at}]`: arg already unquoted, at = offset
-// of the `cd` in `src`.
+// command word at quote depth 0. Returns `[{arg, at, argAt}]`: arg already unquoted, at =
+// offset of the `cd` in `src`, argAt = offset of the argument's first character.
 // Known gap (pre-existing): a `cd` after a keyword or env prefix (`then cd rel`,
 // `FOO=1 cd rel`) is not a command start here and is never checked.
 function findCdArgs(src) {
@@ -117,7 +118,7 @@ function findCdArgs(src) {
       const at = i;
       i += 2;
       while (i < src.length && (src[i] === ' ' || src[i] === '\t')) i++;
-      args.push({ arg: readWord(true), at });
+      args.push({ argAt: i, arg: readWord(true), at });
       atCmdStart = false;
       continue;
     }
@@ -163,18 +164,137 @@ function assignmentsAreCertain(raw, at) {
   return true;
 }
 
+// Absolute-valued variables (2026-10-04). The certain-resolution path above refuses any
+// `$(…)`, any conditional assignment and anything it cannot textually expand, so it blocked
+// `cd $TMPDIR`, `T=$(mktemp -d); cd $T`, `… && S=/abs && cd $S` and loop variables.
+// Transcript replay of main-session fires: 12 of the 17 `cd $VAR` commands the hook still
+// blocked landed absolute (1 was genuinely relative, 4 were unknowable). This judges only
+// where the target is ANCHORED, never its full value: `$S/sub` is as absolute as `$S`.
+//
+// A variable is absolute when it is a well-known absolute env var, or when it has at least
+// one assignment (or `for NAME in` word list) before the cd and EVERY one of them is
+// absolute. "Every", not "the last", is what makes conditionals safe: whichever assignment
+// actually ran, the cd lands absolute. The one way to be wrong is a var none of whose
+// assignments ran AND that arrived relative from the environment — shell variables do not
+// survive between Bash calls, so only an exported profile var could, and the cost of that
+// miss is cwd drift, not damage. Unknown stays blocked: a false block costs one turn.
+//
+// Deliberately NOT absolute: `$PWD` and `$(pwd)` — `cd $PWD/sub` is `cd sub` with extra
+// steps, the exact leak this hook exists for. `$(mktemp …)` counts only when it creates
+// under TMPDIR (no template, `-t`, or a template that is itself absolute); `mktemp -d x.XX`
+// creates in the cwd. Assignments are found on `stripped` (subshells blanked, so `(W=/a)`
+// never counts) but values are read from `command`, where `$(…)` is still intact.
+//
+// Review of 7aa0703 (2026-10-04), four false ALLOWS closed: (1) a relative `-p`/`--tmpdir`
+// dir was never examined because `-t` short-circuited and `-` tokens were skipped; (2) a
+// well-known name reassigned in the same command (`TMPDIR=build; cd $TMPDIR`) — ABSOLUTE_ENV
+// now applies only when the name is never assigned, else the every-assignment rule; (3) a
+// quoted tilde (`D="~/x"`) is literal in bash; (4) single quotes (`cd '$TMPDIR'`) expand
+// nothing, and `~+` / `~-` are $PWD / $OLDPWD, not $HOME. `~` itself is judged as $HOME.
+// Known gap: assignments made by `read`, `printf -v`, `eval`, `mapfile` or `source` are
+// invisible here, so `read TMPDIR; cd $TMPDIR` or `D=/a; printf -v D sub; cd $D` still allow.
+const ABSOLUTE_ENV = new Set(['HOME', 'TMPDIR', 'OLDPWD']);
+
+function substitutionIsAbsolute(inner, before, depth) {
+  const s = inner.trim();
+  if (/^git(?:[ \t]+-C[ \t]+\S+)?[ \t]+rev-parse[ \t]+--show-toplevel$/.test(s)) return true;
+  const mk = s.match(/^mktemp((?:[ \t]+\S+)*)$/);
+  if (!mk) return false;
+  const tokens = mk[1].trim().split(/[ \t]+/).filter(Boolean);
+  const templates = [];
+  let dir = null; // the `-p DIR` / `--tmpdir=DIR` value: when given, it alone decides
+  let prefixFlag = false;
+  for (let k = 0; k < tokens.length; k++) {
+    const tk = tokens[k];
+    let m;
+    if ((m = tk.match(/^--tmpdir=(.*)$/)) !== null) dir = m[1];
+    else if ((m = tk.match(/^-[dqu]*p(.*)$/)) !== null) dir = m[1] !== '' ? m[1] : (tokens[++k] || '');
+    else if (tk === '-t') prefixFlag = true;                  // macOS: prefix under TMPDIR
+    else if (!tk.startsWith('-')) templates.push(tk);
+  }
+  if (dir !== null) return dir !== '' && leadingIsAbsolute(dir, before, depth + 1);
+  if (prefixFlag || templates.length === 0) return varIsAbsolute('TMPDIR', before, depth + 1);
+  return templates.every(t => leadingIsAbsolute(t, before, depth + 1));
+}
+
+// `text` is the source starting at a word (a cd arg or an assignment value).
+function leadingIsAbsolute(text, before, depth) {
+  const q = text[0] === '"' || text[0] === "'" ? text[0] : '';
+  const t = q ? text.slice(1) : text;
+  if (t[0] === '/') return true;
+  if (q === "'") return false;                                 // single quotes expand nothing
+  if (t[0] === '~') {                                          // bare `~` / `~/` = $HOME, unquoted only
+    return q === '' && /^~(?:\/|$|[\s;&|)`])/.test(t) && varIsAbsolute('HOME', before, depth + 1);
+  }
+  if (t.startsWith('$(')) {
+    let d = 0;
+    for (let k = 1; k < t.length; k++) {
+      if (t[k] === '(') d++;
+      else if (t[k] === ')' && --d === 0) return substitutionIsAbsolute(t.slice(2, k), before, depth);
+    }
+    return false;
+  }
+  if (t[0] === '`') {
+    const end = t.indexOf('`', 1);
+    return end > 0 && substitutionIsAbsolute(t.slice(1, end), before, depth);
+  }
+  const v = t.match(/^\$(?:\{(\w+)\}|(\w+))/);
+  return v !== null && varIsAbsolute(v[1] || v[2], before, depth + 1);
+}
+
+// Offsets (into `command`) where each assignment value / for-list word of NAME begins before
+// `before`; null when an untracked form (`NAME+=`) appears.
+function assignedValues(name, before) {
+  const scan = stripped.slice(0, before);
+  const quoteless = hookLib.stripQuotedRegions(scan);
+  const inComment = (pos) =>
+    /(?:^|\s)#/.test(quoteless.slice(quoteless.lastIndexOf('\n', pos - 1) + 1, pos));
+  const values = [];
+  for (const m of scan.matchAll(new RegExp('(^|[^\\w$])' + name + '(\\+?)=', 'g'))) {
+    const pos = m.index + m[1].length;
+    if (inComment(pos)) continue;
+    if (m[2] === '+') return null;                               // `W+=x`: not tracked
+    values.push(pos + name.length + 1);
+  }
+  const forRe = new RegExp('(^|[\\s;&|])for[ \\t]+' + name + '[ \\t]+in[ \\t]+([^;\\n]*)', 'g');
+  for (const m of scan.matchAll(forRe)) {
+    if (inComment(m.index + m[1].length)) continue;
+    const listAt = m.index + m[0].length - m[2].length;
+    for (const w of m[2].matchAll(/\S+/g)) values.push(listAt + w.index);
+  }
+  return values;
+}
+
+function varIsAbsolute(name, before, depth) {
+  if (depth > 4 || !/^[A-Za-z_]\w*$/.test(name)) return false; // `$1`, `$_`: unknown
+  const values = assignedValues(name, before);
+  if (values === null) return false;
+  if (values.length === 0) return ABSOLUTE_ENV.has(name);       // well-known AND never reassigned
+  return values.every(at => leadingIsAbsolute(command.slice(at), at, depth));
+}
+
 const offenders = [];
-for (const { arg: raw, at } of findCdArgs(stripped)) {
+for (const { arg: raw, at, argAt } of findCdArgs(stripped)) {
   if (raw === '') continue;
   const arg = stripped.length <= MAX_RESOLVE_CHARS && assignmentsAreCertain(raw, at)
     ? hookLib.resolveAssignedVars(raw, stripped, at)
     : raw;
 
   // Allow well-known safe forms
+  // `~` / `$HOME` are judged on the SOURCE (leadingIsAbsolute), never on `arg`: the resolver
+  // drops quotes (`D="~/x"` came back as a bare `~/x`) and cannot see `HOME=build`.
   if (arg === '-') continue;                         // cd -
-  if (arg === '~' || arg.startsWith('~/')) continue; // cd ~ / cd ~/foo
-  if (arg.startsWith('$HOME')) continue;             // cd $HOME / cd $HOME/foo
   if (arg.startsWith('/')) continue;                 // cd /absolute (quoted or not)
+  // Direct `cd "~/foo"` stays allowed (false_positive_canary.py "quoted tilde"): bash takes
+  // it literally, but a dir named `~` under the cwd essentially never exists, so the cd fails
+  // and nothing leaks. Judged on `raw` (the cd's own word), so `D="~/x"; cd $D` is not covered.
+  if ((raw === '~' || raw.startsWith('~/')) && stripped.length <= MAX_RESOLVE_CHARS && varIsAbsolute('HOME', argAt, 0)) continue;
+  if (stripped.length <= MAX_RESOLVE_CHARS) {
+    if (leadingIsAbsolute(command.slice(argAt), argAt, 0)) continue; // cd ~, $HOME, $TMPDIR, $T
+  } else if (/^(?:~(?:\/|$|[\s;&|])|\$(?:HOME\b|\{HOME\}))/.test(command.slice(argAt)) &&
+             (assignedValues('HOME', argAt) || [0]).length === 0) {
+    continue;                                        // oversized command: plain cd ~ / $HOME only
+  }
 
   // Relative path — leak risk
   offenders.push(raw);

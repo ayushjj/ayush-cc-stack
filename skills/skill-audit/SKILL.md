@@ -1,4 +1,5 @@
 ---
+disable-model-invocation: true
 name: skill-audit
 description: Audit ~/.claude/skills/ and ~/.claude/hooks/ for universality — detect project-specific tokens leaking into universal layers. Run quarterly (aligned with /prune-memory). Triggers on "/skill-audit", "audit skills", "skills universal?", "check skill contamination", "universality audit".
 ---

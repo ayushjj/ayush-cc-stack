@@ -295,6 +295,12 @@ The headline metric (units done, batches dispatched, streak) stays load-bearing 
 
 Keep last-3 session-delta lines only; older sessions already have learnings/ pointers and shouldn't accumulate in MEMORY.md.
 
+**Write memory as dated history** (owner yes 2026-10-24, weekly-check card from mattpocock/skills chief-of-staff; re-check at the next `/prune-memory`). In MEMORY.md and every memory file this wrap writes:
+- Every claim about setup, code, versions or who-does-what carries a date ("as of 2026-10-24") or the commit/file it was true at.
+- Never write "currently", "now", "still" or a bare "is" about setup without that date beside it.
+- When a fact changes, write the new dated line and mark the old one `superseded <date>` — do not silently rewrite it.
+Why: an undated claim reads as true today; 4 memory files called CE 3.26.3 current for 20 days after it auto-updated (P42).
+
 **MUST-PRESERVE invariants** (catchup skill consumers — verifying these structural fields lets us compress freely without breaking the load-bearing readers):
 - `## Current State (YYYY-MM-DD ...)` header parses as date for `/catchup` Step 2 staleness check.
 - Phase line names the active spec when one exists — `/catchup` Step 1.4a reads this for active-spec detection.
@@ -615,27 +621,21 @@ if [ -n "$(git -C ~/.claude status --porcelain)" ]; then
   # >>> REVIEW the leftover report before committing. DEFAULT IS LEAVE — leftovers
   # are siblings' in-flight work. Claim ONLY paths you created via Bash or deleted
   # via rm THIS session (the two capture gaps):  node "$SM" claim <repo-rel-path>...
-  # Review gate is DELTA-aware + per-repo (S256): wrap doc/learning/telemetry
-  # edits are content-only delta and pass with NO /review round-trip, even on
-  # top of session code a /review already covered. It blocks only if UNREVIEWED
-  # CODE sits in the diff — then run /review (it scopes to that delta, small
-  # slate) before the commit line. Other repos' flags can no longer clobber.
+  # Review gate (S81): fires on PUSH, not commit — the commit below is never
+  # blocked. At push it checks only what the push SENDS (committed, unpushed work
+  # on this branch); doc/learning/telemetry commits are content-only and pass.
+  # It blocks only if UNREVIEWED CODE is in those commits — then run /review
+  # (scoped to that delta) and push again.
   #
-  # ~/.claude ALWAYS CARRIES SIBLING SESSIONS' DIRTY FILES, so this gate fires here
-  # far more than in a project repo (S182: a terminated session's automate-me-state.yaml
-  # blocked the whole sync; the classifier rated a pure-state YAML T2/EXEC because it
-  # fails toward code on YAML). The gate is repo-wide while this commit is
-  # PATHSPEC-scoped, so it objects to files the commit excludes — two scopes that
-  # cannot agree. Do NOT reach for CLAUDE_REVIEW_GATE_SKIP (a permission classifier
-  # blocks the inline form anyway, correctly). RESOLUTION, in order:
-  #   1. `node .../classify-diff.js --tier < <(check-review-gate.js --delta --repo ~/.claude)`
-  #      to see WHICH file blocks and why.
-  #   2. READ that file's diff. In ~/.claude it is nearly always state/config/docs.
-  #   3. If it is genuinely content, you have now reviewed it — write the flag
-  #      (`write-review-flag.js --verdict PASS --repo ~/.claude`) and commit. Adopt the
-  #      file into the commit with a body note saying you reviewed before adopting.
-  #   4. If it IS code you did not write, leave it and say so — do not commit it.
-  # Steps 1-3 are ~30s and make the sync land every wrap, which is the expectation.
+  # The PUSH runs in a SEPARATE Bash call after this block (see below). In one cell,
+  # a commit before the push has not happened when the gate runs, so the gate falls
+  # back to the whole working tree — and ~/.claude ALWAYS carries sibling sessions'
+  # dirty files, which this PATHSPEC commit excludes (the S182 scope clash). Split
+  # cells keep the gate on exactly the committed set. Do NOT reach for
+  # CLAUDE_REVIEW_GATE_SKIP. If the push blocks:
+  #   1. Read the gate's file list; READ those files' diffs (`git -C ~/.claude log -p @{u}..`).
+  #   2. Code you wrote this session → run /review, then push.
+  #   3. Code you did not write in your commits → stop and tell the user.
   # ENFORCING gate — CLAUDE.md compression. It lives in THIS repo, so it blocks THIS
   # commit, not the project's. Two ratchets: the file may not grow; the count of
   # oversized mistake rows may not increase. A FAIL here is recoverable: every wrap
@@ -643,17 +643,19 @@ if [ -n "$(git -C ~/.claude status --porcelain)" ]; then
   # to the archive, lower the constant, re-run. Never `|| true` this line.
   python3 "$HOME/.claude/skills/wrapping-session/verify_claude_md.py" --strict
   # Commit ONLY the pathspec set — immune to index pollution from crashed wraps.
-  # NOTE: --pathspec-from-file commits WORKING-TREE content, not the index (verified),
-  # which is the same bytes the gate above just checked.
+  # NOTE: --pathspec-from-file commits WORKING-TREE content, not the index (verified).
   git -C ~/.claude commit --pathspec-from-file="$HOME/.claude/.session-manifests/${CLAUDE_CODE_SESSION_ID}.commit-pathspec" -m "Wrap <YYYY-MM-DD>: <1-line session outcome>"
-  git -C ~/.claude push
   node "$SM" prune     # drop committed entries; mid-wrap appends survive
-  node "$LOCK" release # idempotent; safe even if commit/push errored above
+  node "$LOCK" release # idempotent; safe even if commit errored above
 else
-  # Nothing dirty — but push any stranded commits (e.g. a prior wrap's push failed).
-  if git -C ~/.claude status -sb | head -1 | grep -q '\[ahead'; then git -C ~/.claude push; fi
   echo "~/.claude/ has no changes to sync."
 fi
+```
+
+Then, in a **separate Bash call** (so the push gate sees only committed work — see the comment above), push whatever is ahead, including commits stranded by an earlier failed push:
+
+```bash
+if git -C ~/.claude status -sb | head -1 | grep -q '\[ahead'; then git -C ~/.claude push; fi
 ```
 
 **Flow rules (read the stage report BEFORE the commit line):**

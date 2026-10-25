@@ -224,14 +224,15 @@ const SHELL_VALUE = /:\s*"[^"]*(&&|\|\||[|;`]|\$\(|(?<![\w-])(curl|wget|rm|sh|ba
 // PATH-anchored (S256 review: basename-anywhere let any file NAMED like a data
 // file bypass the nets — pin the known repo-relative locations instead).
 // graph-index.yaml ([redacted]): a node index of title/description/topics/
-// source/source_file/domain/outgoing. No directive key exists in its schema, and it
+// source/source_file/domain/kind/bet_date/outgoing (kind + bet_date added 2026-10-24: single
+// plain values held by SCALAR_NODE_KEYS, so no new exec surface). No directive key exists in its schema, and it
 // is CONSUMED by build-graph.js, never executed. It is prose-bearing DATA that the
 // extension-level YAML default classified as orchestration WITHOUT READING IT — that
 // branch inspects no content, so rewording the prose could never have unblocked the
 // commit ([redacted] S2, 2026-08-21). Data BY CONSTRUCTION: the schema has no
 // exec surface to grow — and that is ENFORCED, not asserted: the graph repo's
 // validate-graph.js Check 8 (lib/schema-keys.js, mutation-tested both surfaces)
-// closes the key set to 4 top-level + 7 per-node names and fails the build on any
+// closes the key set to 4 top-level + 9 per-node names and fails the build on any
 // directive key. That check IS the admission bar for this entry — if it is ever
 // weakened or removed, pull graph-index.yaml from this set in the same change. The
 // YAML branch has no content net behind it, so the exemption is TOTAL wherever a

@@ -84,7 +84,22 @@ function tryExec(cmd) {
 
 // --no-color/--no-ext-diff/--no-textconv/--text: repo config (color.ui=always, diff.external) or a
 // staged `.gitattributes` `-diff` could otherwise blank the assertion lines (review round 2).
-const diff = tryExec('git -c core.quotepath=off diff --cached --unified=0 --no-color --no-ext-diff --no-textconv --text');
+const DIFF = 'git -c core.quotepath=off diff --unified=0 --no-color --no-ext-diff --no-textconv --text';
+let diff = tryExec(DIFF.replace(' diff ', ' diff --cached '));
+// An `add` / `commit -a` earlier in this SAME cell stages files the index cannot show yet
+// (S81 replay trial: 7/8 commits were `git add … && git commit …`, all dark). Read those as
+// working-tree-vs-index diffs, limited to the add's pathspecs. New untracked files cannot
+// weaken an existing assertion, so they are not needed here.
+try {
+  const pend = require('./lib/hook-input.js').pendingStage(command);
+  if (pend.any) {
+    const q = (p) => "'" + String(p).replace(/'/g, "'\\''") + "'";
+    // `git diff` (no pathspec) covers the whole repo from any subdirectory.
+    const ps = [...pend.paths, ...pend.trackedPaths];
+    const spec = pend.whole || pend.trackedWhole ? '' : ' -- ' + ps.map(q).join(' ');
+    diff = (diff + '\n' + tryExec(DIFF + spec)).trim();
+  }
+} catch { /* lib unavailable → index-only, the pre-existing behaviour */ }
 if (!diff) {
   process.exit(0);
 }
@@ -254,7 +269,9 @@ const msg = [
   '   Removed or weakened assertions:',
   ...warnings,
   '',
-  '   If intentional, proceed. If not, unstage and investigate.',
+  process.env.CLAUDE_ANTICHEAT_BLOCK === '1'
+    ? '   BLOCKED. If the change is intentional, re-run the same commit with "ANTICHEAT-OK: <one-line reason>" in the message. If not, unstage and investigate. Do not retry unchanged.'
+    : '   If intentional, proceed. If not, unstage and investigate.',
   '════════════════════════════════════════════════════════════════',
 ];
 

@@ -107,11 +107,27 @@ Before doing anything:
 
 From the pasted content, identify **distinct, atomic insights**. Each insight is ONE clear idea.
 
-**Quality bar:**
-- Insight titles MUST be claims or statements, not labels (see `references/frontmatter-template.md` for examples)
-- Each insight should stand alone — someone reading just that file should understand the idea
-- Aim for 3-8 insights per paste (fewer if the content is narrow, more if it's rich)
-- Skip generic/obvious points. Keep only things worth remembering.
+**What the graph is for (owner, 2026-10-24):** when starting something new — brainstorming, scoping, checking a
+premise, designing a product, an agent or its infrastructure — it hands the reader (the owner or an agent) a connected
+set of (a) thinking tools (mental models) and (b) durable lessons about building AI products, agents and their
+infrastructure, so nobody relearns them. Value is in connections and recall at decision time, not in count.
+
+**Entry questions — an insight must pass all five, or it is not created:**
+1. **Useful at decision time.** Would it change a choice when scoping, checking a premise, or designing a product, an
+   agent or its infrastructure — or is it a thinking tool? Name which in your head; if you can't, drop it.
+2. **Lasting.** Does the lesson outlive today's models, tools, vendors and prices? If it names a product or number,
+   keep the lesson as the title and move the product/number into the body as the example. If the lesson IS the
+   product or number, drop it.
+3. **Carries its reason.** A practice is welcome if it says why it works. A step-by-step for one tool is not.
+4. **New.** If it only sharpens an existing insight (graph-index.yaml), update that insight instead of adding one.
+5. **Safe to publish.** The site is public: no customer, price or [redacted] facts.
+
+Most sources yield 0–2 insights; 0 is a valid result — say so and stop. Then:
+- Titles are claims, not labels (`references/frontmatter-template.md`), stated as the lasting lesson.
+- Each insight stands alone — someone reading only that file understands it.
+- Set `kind:` — `thinking-tool` (a mental model), `principle` (why/design rule/trade-off), `practice` (a way of
+  working that carries its reason), or `bet` (a claim about where things are going; also set `bet_date:` so it reads
+  as a dated bet, not a fact).
 
 **Source-fidelity rules:** Read `references/fidelity-rules.md` for the 5 hard constraints on extraction accuracy. These exist because a 2026-03-02 audit found a 43% error rate — they are non-negotiable.
 
@@ -156,7 +172,7 @@ Update `~/dev/[redacted]/graph-index.yaml` with the new nodes.
 
 **Batch all changes into one edit operation.** Compose the full set of new node entries mentally, then apply them in a single Edit call. Do not make multiple sequential edits to this file — each edit re-reads the file and wastes time.
 
-1. For each new insight, add an entry with: title, description, topics, source, source_file, domain, outgoing (insight-to-insight wikilinks only, exclude topic MOC links)
+1. For each new insight, add an entry with: title, description, topics, source, source_file, domain, kind (plus `bet_date: "YYYY-MM-DD"`, quoted, only when kind is bet — must match the frontmatter; validate-graph.js Check 9 fails otherwise), outgoing (insight-to-insight wikilinks only, exclude topic MOC links)
 2. Keep entries sorted alphabetically by slug
 3. The `domain` field should match the `--domain` parameter (defaults to `ai`)
 

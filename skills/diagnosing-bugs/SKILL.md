@@ -1,6 +1,8 @@
 ---
 name: diagnosing-bugs
-description: Diagnosis loop for hard bugs and performance regressions. Use when the user says "diagnose"/"debug this", or reports something broken/throwing/failing/slow.
+description: The debug route (CLAUDE.md Rule 0 DEBUG) — use instead of compound-engineering:ce-debug. Diagnosis loop for bugs and performance regressions; read the log/stderr/error artifact first, then build a red-capable repro before any hypothesis. Use when the user says "diagnose"/"debug this", or reports something broken/throwing/failing/slow/500/crash/hang/401, or a test fails for an unknown reason.
+effort: high
+# Vendored 2026-10-04 from mattpocock/skills (~/.agents/skills/diagnosing-bugs) so effort: high survives skill updates. Re-sync by hand.
 ---
 
 # Diagnosing Bugs

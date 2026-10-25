@@ -92,18 +92,20 @@ try {
 
 if (!shouldWarn) process.exit(0);
 
-process.stderr.write([
+// warnModel, not stderr: exit-0 stderr never reaches the model (S81 probe).
+const warn = (t) => { try { require('./lib/hook-input.js').warnModel(t); } catch { process.stderr.write(t); } };
+warn([
   '════════════════════════════════════════════════════════════════',
   '⚠  ALIGN (Rule 0): this session just went multi-file with no',
   '   alignment pass on record.',
   '',
-  '   State the Rule 0 classification in one line, then ask 3-5',
-  '   questions whose answers would CHANGE what you build:',
-  '     - what does done look like, concretely?',
-  '     - which nearby thing is deliberately out of scope?',
-  '     - what have you assumed that the user has not said?',
-  '',
-  '   Get the answers, THEN build. An advice-request is not an',
+  '   State the Rule 0 classification and what "done" means in one',
+  '   line. Then ask the user ONLY if one of these holds:',
+  '     - the request could be advice, not a go-ahead to build',
+  '     - the work is outward-facing or hard to undo',
+  '     - a business/product/UX/money choice is unstated',
+  '   Engineering approach choices are yours (decision rights):',
+  '   state the choice and proceed. An advice-request is not an',
   '   action-authorization.',
   '',
   '   Fires once per session. Skip: CLAUDE_ALIGNMENT_SKIP=1',

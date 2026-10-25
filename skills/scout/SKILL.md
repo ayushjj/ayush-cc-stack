@@ -1,4 +1,5 @@
 ---
+disable-model-invocation: true
 name: scout
 description: Use when you have bookmarked AI workflow tips (URLs, articles, tweets, screenshots) to analyze against your current Claude Code setup and find gaps. Triggers on '/scout', 'workflow tips', 'compare setup', 'what am I missing'.
 user_invocable: true

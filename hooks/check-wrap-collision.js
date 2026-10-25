@@ -84,7 +84,9 @@ try {
   // (don't cry wolf over a stale lock the acquirer would reclaim anyway).
   if (!holderLive(LOCK_DIR, owner, TTL_MS)) process.exit(0);
 
-  process.stderr.write(
+  // warnModel, not stderr: exit-0 stderr never reaches the model (S81 probe).
+  const warn = (t) => { try { require('./lib/hook-input.js').warnModel(t); } catch { process.stderr.write(t); } };
+  warn(
     `\n══ WRAP-COLLISION WARNING (mutex hole) ══\n` +
     `   You are about to write the SHARED ~/.claude index, but session ` +
     `${shortId(owner.sessionId)} (pid ${owner.pid}) holds the git-sync lock.\n` +

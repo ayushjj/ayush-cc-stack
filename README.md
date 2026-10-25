@@ -29,7 +29,7 @@ ayush-cc-stack/
 ├── .gitignore                 excludes runtime state (settings.local.json, projects/, sessions/, etc.)
 ├── principles/                22 externalized full-case-study principles (P01–P22) + INDEX.md
 ├── hooks/                     14 hooks + their canary tests
-├── skills/                    30 skills (10 vendored — see THIRD_PARTY_NOTICES.md)
+├── skills/                    29 skills (9 vendored — see THIRD_PARTY_NOTICES.md)
 └── learnings/                 4 sanitized case studies + curation README
 ```
 

@@ -60,6 +60,12 @@ run 0 "4. Read nonexistent path → allow (fail open)" \
       "{\"tool_name\":\"Read\",\"tool_input\":{\"file_path\":\"$T/nope.txt\"}}"
 run 0 "4b. Read 400-line file with pages:\"1-2\" → allow (PDF range == limit)" \
       "{\"tool_name\":\"Read\",\"tool_input\":{\"file_path\":\"$T/big.txt\",\"pages\":\"1-2\"}}"
+# allow_large lifts the Read TOOL's own size cap; it is not a range choice and does NOT
+# exempt this gate (hook-review 2026-10-15). Only live case since 09-20: a 4,376-line JSON
+# read with allow_large:true was blocked, and the model switched to targeted python
+# queries — a true positive. Honouring it would have put 4,376 lines in main context.
+run 2 "4n. Read 400-line file with allow_large:true → BLOCK (tool cap ≠ this gate)" \
+      "{\"tool_name\":\"Read\",\"tool_input\":{\"file_path\":\"$T/big.txt\",\"allow_large\":true}}"
 # The escape must be reachable from where the model stands. Read has no command
 # string, so an inline VAR=1 prefix is impossible there and env-only is unsettable
 # per call — the message must point at the Bash form, which IS honoured (case 10).
@@ -280,6 +286,64 @@ seq 1 900 > "$T/schema.rb"
 ln -sf "$T/schema.rb" "$T/schema_prompt.txt"
 run 2 "16s. Read a *_prompt.txt symlink pointing at a 900-line .rb → BLOCK (realpath, not link name)" \
       "{\"tool_name\":\"Read\",\"tool_input\":{\"file_path\":\"$T/schema_prompt.txt\"}}"
+
+echo "== 17. Session-spill exemption (7 of 11 post-tune fires were friction, measured 2026-10-04) =="
+# Shapes copied from the real fires (telemetry/read-size-gate.jsonl, traced to transcripts):
+#   5 × /private/tmp/claude-501/<project-slug>/<session_id>/scratchpad/<file>  (3 subagent
+#       reports Written by a subagent, 2 extraction dumps from a main-session Bash redirect)
+#   1 × ~/.claude/projects/<project-slug>/<session_id>/tool-results/<id>.txt  (harness spill)
+# Every one was then read whole in 2-3 chunks, so the block saved nothing and cost a turn.
+# The 4 true catches were project files (a .py, a _spec.rb, a .py via cat, a results.md) —
+# 17f keeps that shape blocking. The 7th friction fire (a project-dir coverage.md) is NOT
+# exempted: no path rule separates it from the results.md true catch.
+#
+# Positive controls, one per conjunct: 17d session match · 17e session present · 17g ceiling ·
+# 17h tool-results session match · 17i realpath · 17j tmp-root anchor · 17f project file.
+SID="11111111-2222-3333-4444-555555555555"
+OTHER="99999999-8888-7777-6666-555555555555"
+SPROOT="/tmp/claude-$(id -u)/read-size-canary-$$"   # same root the harness uses for scratchpads
+trap 'rm -rf "$T" "$SPROOT"' EXIT
+SP="$SPROOT/$SID/scratchpad"
+TR="$T/.claude/projects/-canary-slug/$SID/tool-results"
+TRO="$T/.claude/projects/-canary-slug/$OTHER/tool-results"
+mkdir -p "$SP/laneD" "$TR" "$TRO" "$T/proj" "$T/$SID/scratchpad"
+seq 1 423 > "$SP/report.md"            # subagent report shape
+seq 1 622 > "$SP/laneD/options.html"   # nested subdir under scratchpad
+seq 1 979 > "$SP/dump.txt"                # largest observed friction fire
+seq 1 1200 > "$SP/huge.txt"                # over the 3x ceiling
+seq 1 389 > "$TR/bshdrwkm4.txt"            # tool-results spill shape
+seq 1 389 > "$TRO/bshdrwkm4.txt"
+seq 1 656 > "$T/proj/script.py"    # true-catch shape (project code file)
+seq 1 500 > "$T/$SID/scratchpad/notes.md"  # right tail, wrong root
+ln -sf "$T/proj/script.py" "$SP/linked.py"
+rm -f "$TELEM"
+run 0 "17a. Read own-session scratchpad report (423) → allow" \
+      "{\"tool_name\":\"Read\",\"session_id\":\"$SID\",\"tool_input\":{\"file_path\":\"$SP/report.md\"}}"
+tail -1 "$TELEM" | grep -q '"action":"exempt-spill"' && tail -1 "$TELEM" | grep -q '"lines":423' \
+  && pass "17a2. ...and logs action:exempt-spill with lines" \
+  || fail "17a2. logs action:exempt-spill" "$(tail -1 "$TELEM")" 'action=exempt-spill lines=423'
+run 0 "17b. Read own-session tool-results spill (389) → allow" \
+      "{\"tool_name\":\"Read\",\"session_id\":\"$SID\",\"tool_input\":{\"file_path\":\"$TR/bshdrwkm4.txt\"}}"
+run 0 "17c. Read own-session scratchpad 979-line dump → allow (under 3x ceiling)" \
+      "{\"tool_name\":\"Read\",\"session_id\":\"$SID\",\"tool_input\":{\"file_path\":\"$SP/dump.txt\"}}"
+run 0 "17c2. Read own-session scratchpad nested subdir (622) → allow" \
+      "{\"tool_name\":\"Read\",\"session_id\":\"$SID\",\"tool_input\":{\"file_path\":\"$SP/laneD/options.html\"}}"
+run 0 "17k. Bash \`cat\` own-session scratchpad report → allow" \
+      "{\"tool_name\":\"Bash\",\"session_id\":\"$SID\",\"tool_input\":{\"command\":\"cat $SP/report.md\"}}"
+run 2 "17d. ANOTHER session's scratchpad → BLOCK (session match, POSITIVE CONTROL)" \
+      "{\"tool_name\":\"Read\",\"session_id\":\"$OTHER\",\"tool_input\":{\"file_path\":\"$SP/report.md\"}}"
+run 2 "17e. scratchpad with NO session_id in payload → BLOCK (fails closed)" \
+      "{\"tool_name\":\"Read\",\"tool_input\":{\"file_path\":\"$SP/report.md\"}}"
+run 2 "17f. 656-line project .py (true-catch shape) → BLOCK (POSITIVE CONTROL)" \
+      "{\"tool_name\":\"Read\",\"session_id\":\"$SID\",\"tool_input\":{\"file_path\":\"$T/proj/script.py\"}}"
+run 2 "17g. 1200-line own-session scratchpad file → BLOCK (ceiling, POSITIVE CONTROL)" \
+      "{\"tool_name\":\"Read\",\"session_id\":\"$SID\",\"tool_input\":{\"file_path\":\"$SP/huge.txt\"}}"
+run 2 "17h. ANOTHER session's tool-results → BLOCK (session match, POSITIVE CONTROL)" \
+      "{\"tool_name\":\"Read\",\"session_id\":\"$SID\",\"tool_input\":{\"file_path\":\"$TRO/bshdrwkm4.txt\"}}"
+run 2 "17i. scratchpad symlink → 656-line project .py → BLOCK (realpath, not link location)" \
+      "{\"tool_name\":\"Read\",\"session_id\":\"$SID\",\"tool_input\":{\"file_path\":\"$SP/linked.py\"}}"
+run 2 "17j. <sid>/scratchpad/ outside the tmp root → BLOCK (root anchor, POSITIVE CONTROL)" \
+      "{\"tool_name\":\"Read\",\"session_id\":\"$SID\",\"tool_input\":{\"file_path\":\"$T/$SID/scratchpad/notes.md\"}}"
 
 echo
 echo "RESULT: $PASS passed, $FAIL failed"

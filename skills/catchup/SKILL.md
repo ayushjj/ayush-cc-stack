@@ -120,6 +120,7 @@ Surface every line it prints in the Step 3 summary (see **Cadence** line). Advis
 **Watch out**: [rows in `~/.claude/evals/mistake-ledger.md` whose `Last` date is ≤3 days ago (read the file — it is not auto-loaded), or "None"]
 **State health**: [from Step 1 item 5 — e.g., "MEMORY.md 97L/14K, CLAUDE.md 215L/35K" or "State health: unavailable"; append "— consider `/prune-memory`" if over soft threshold]
 **Cadence**: [every line the Step 2 cadence-check printed, one per row; omit this line entirely if it printed nothing]
+**Weekly check**: [if the cadence check printed `📬 weekly check results ready`: run level-up's **Weekly delivery** (foreground) now and summarise it here — cards needing his yes first. If Step 5c launched the check this session: "running in the background — I'll bring the results when it finishes". Omit otherwise.]
 ```
 
 ## Step 4 (only if `/catchup all`): Cross-project Table
@@ -142,6 +143,33 @@ Flag any `blocked` status with a one-line blocker note. Max 5 projects.
 2. **Session learnings glob**: `ls ~/Desktop/*/learnings/*.md 2>/dev/null | tail -10` + `ls ~/dev/*/learnings/*.md 2>/dev/null | tail -10` + `ls ~/.claude/projects/*/memory/learnings/*.md 2>/dev/null | tail -10` + `ls ~/.claude/learnings/*.md 2>/dev/null | tail -10` (covers both legacy `~/Desktop/*` and migrated `~/dev/*` projects, plus user-global cross-project archives from meta-sessions like CLAUDE.md/skill restructures). Read filenames only (dates + topics). Read the 2-3 most relevant file contents.
 
 If a sub-step's source is missing, emit one line — `skipped: [redacted] index (path missing)` — do NOT skip silently (a silently-missing path hid a dead `~/desktop` reference for weeks; P57).
+
+## Step 5b: Daily Lesson (first session of the day)
+
+If the Step 2 cadence-check printed `🎓 /brief: …` (not taken today) or `💡 /brief: never run`, run the
+`brief` skill now. A `⚠️ … /brief — CANNOT CHECK` line counts as due too (losing a lesson is worse than giving one twice); report it in the summary as well. Run it right after the Step 3 summary and before Step 6. The owner asked for this to
+happen without him calling it (2026-10-04: "one lesson at the start of the day… 10, 15 minutes and
+then go ahead"). End the lesson with its Coverage line, then continue to Step 6 in the same reply. The lesson day is the UTC date, so it resets at 05:30 India time.
+Skip only when the session is an automated (non-interactive) run or he says "skip the lesson".
+
+## Step 5c: Weekly Check (when due)
+
+If the Step 2 cadence-check printed a `💡 /level-up:` line (the weekly check is due), start it **in the background**
+so the owner never has to ask (owner, 2026-10-24: "we are hiring this weekly run to get a job done"):
+1. **Claim the day first:** `mkdir ~/dev/weekly-run/runs/$(date -u +%F).started` — if that fails (the folder exists),
+   another session already started it today: skip. (Same reason as the lesson's claim: sessions opened minutes apart.)
+2. One `Agent` call, `subagent_type: "weekly-check"`, `run_in_background: true`, model opus, prompt
+   `Run the /level-up skill in Weekly mode (/level-up weekly). Follow its "Weekly mode" section exactly — read, judge
+   and write only inside ~/dev/weekly-run; no commits, pushes or other writes.`
+   The `weekly-check` agent (`~/.claude/agents/weekly-check.md`) carries the guard `hooks/check-weekly-sandbox.js
+   --enforce`, which blocks writes outside weekly-run, repo changes, installs and outward tools (canary:
+   `hooks/check-weekly-sandbox.test.sh`). If `weekly-check` is not in the agent list, do NOT fall back to an
+   unlocked agent: tell the owner the weekly check is skipped today and why.
+3. Say so in one line in the Step 3 summary and carry on with Step 6 — do not wait. When it finishes, run level-up's
+   **Weekly delivery** in this session and tell the owner the result in plain words, cards first. Do not wrap the
+   session while it is still running.
+Skip only in an automated (non-interactive) session. A `⚠️ weekly check started N times … none finished` line means
+it keeps dying: say so to the owner instead of launching again blind, and read the latest record for why.
 
 ## Step 6: Ask Direction, Then Settle the Branch
 
@@ -184,8 +212,8 @@ Cut from `origin/master`, never local `master` — the Step 1.0 fetch refreshed 
 - Don't re-read MEMORY.md — it's auto-loaded via claudeMd. If you find yourself needing MEMORY.md detail that's NOT in the auto-loaded block, that means MEMORY.md was truncated (>200 lines) — fix MEMORY.md instead of reading it here.
 - Don't re-read CLAUDE.md — also auto-loaded. Cite it from context.
 - Don't read the full session-registry.yaml — only the top entry for this project (and all projects' top entries if `all` flag).
-- Don't create or modify files beyond three named exceptions: fixing a drifted PR status in MEMORY.md (Step 1 item 7), creating a missing `telemetry/` directory (CLAUDE.md § Environment), and the Step 6b branch checkout — which needs the user's yes. Reading facts is unconditional; changing the working tree needs a yes.
+- Don't create or modify files beyond the named exceptions (plus the Step 5c claim folder and Weekly delivery's writes): fixing a drifted PR status in MEMORY.md (Step 1 item 7), creating a missing `telemetry/` directory (CLAUDE.md § Environment), and the Step 6b branch checkout — which needs the user's yes. Reading facts is unconditional; changing the working tree needs a yes.
 - Don't switch branches silently, and don't switch at all with uncommitted tracked changes (Step 6b row 1).
-- Don't run `/wrapping-session` or any other skill — this is session START, not session END.
+- Don't run `/wrapping-session` or any other skill — this is session START, not session END. Two exceptions: the daily lesson (`brief`, Step 5b) and the weekly check (`level-up` Weekly mode in the background, Step 5c, plus its Weekly delivery).
 - Don't start coding or investigating before the user confirms direction.
 - Don't add [redacted] or learnings enrichment without the `deep` flag — they're load-heavy and only needed in unfamiliar territory.

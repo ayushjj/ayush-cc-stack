@@ -105,7 +105,9 @@ doing too many jobs — that is itself the finding.
 For each mutation:
 
 1. Apply it.
-2. **Run the check.** Actually execute it.
+2. **Run the check.** Actually execute it — and prove the mutated copy is the one that ran
+   (e.g. its marker appears in the output, or the file hash the check loaded changed). A mutant
+   that never ran reads as SURVIVED-looking green; this showed green twice once (mistake-ledger).
 3. Record the verdict: **KILLED** (check went red) or **SURVIVED** (check still passed).
 4. Revert.
 

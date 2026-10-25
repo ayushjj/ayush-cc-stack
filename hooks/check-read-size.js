@@ -75,6 +75,54 @@ const PROMPT_BASENAME = /(prompt|template)/i;
 const PROMPT_EXT = /\.(txt|prompt)$/i;
 const PROMPT_CEILING_MULTIPLE = 3;
 
+// Session spill files are the friction cluster after the 09-15 tune: 6 of 11 post-tune blocks,
+// measured 2026-10-04 (research/2026-10-04-inventory/inv-hooks-rules.md, traced to transcripts).
+// All 6 were then read WHOLE in 2-3 chunked Reads, so the block saved no context and cost a turn:
+//   5 × /private/tmp/claude-501/<project-slug>/<session_id>/scratchpad/…  — 3 subagent reports
+//       (Written by the subagent, handed back by path) + 2 main-session extraction dumps
+//   1 × ~/.claude/projects/<project-slug>/<session_id>/tool-results/<id>.txt — harness spill
+// The 4 true catches were all project files (.py ×2, _spec.rb, results.md). The 7th friction
+// fire (a project-dir coverage.md) is deliberately NOT covered: no path rule separates it from
+// the results.md true catch.
+//
+// Conjuncts, each with a positive control in canary §17:
+//   1. path shape, anchored at the tmp root / $HOME — `<sid>/scratchpad/` elsewhere blocks (17j)
+//   2. the <session_id> segment equals the payload's session_id — another session's spill, or a
+//      payload with no session_id, blocks (17d, 17e, 17h). This is what keeps it "this session's
+//      own spill" rather than "any file under /tmp".
+//   3. realpath, so a scratchpad symlink to a project file is judged by its target (17i)
+//   4. counted.exact + the same 3×limit ceiling as prompts (17g). Largest observed: 979 lines.
+// Measured cost: 2 PRE-tune blocks on scratchpad subagent reports (report.md 619, census.md 488)
+// were classed true catches, and this exemption would now pass them.
+// NOT covered, for lack of a single observed fire: background task `.output` files.
+const SPILL_SCRATCHPAD = /^\/(?:private\/)?tmp\/claude-\d+\/[^/]+\/([^/]+)\/scratchpad\//;
+
+/** The session id that owns a spill file at `realAbs`, or null when it is not a spill shape. */
+function spillOwner(realAbs) {
+  const m = SPILL_SCRATCHPAD.exec(realAbs);
+  if (m) return m[1];
+  if (!process.env.HOME) return null;
+  // realpath the projects dir itself, not just $HOME: realAbs is fully resolved, so a symlinked
+  // ~/.claude or ~/.claude/projects must be resolved too or the prefix can never match.
+  let projects;
+  try {
+    projects = fs.realpathSync(path.join(process.env.HOME, '.claude', 'projects'));
+  } catch {
+    return null;
+  }
+  const prefix = projects + path.sep;
+  if (!realAbs.startsWith(prefix)) return null;
+  // <project-slug>/<session_id>/tool-results/<file> — exactly four segments, no deeper.
+  const parts = realAbs.slice(prefix.length).split(path.sep);
+  return parts.length === 4 && parts[2] === 'tool-results' ? parts[1] : null;
+}
+
+/** The payload's session_id, or a sentinel that can never equal a path segment. */
+function sessionId() {
+  const s = payload.session_id;
+  return typeof s === 'string' && s.trim() && !s.includes('/') ? s : '\0no-session';
+}
+
 // Always-on guard: an unloadable reader must NOT block every Read/Bash call, so this
 // one fails open — loudly. (Same posture as check-cd-persistence.js.)
 let payload;
@@ -238,12 +286,13 @@ if (hookLib.isSubagentCall()) {
 // and the content test looking at two different files. That is rename laundering, a measured
 // evasion class here (S69, 2026-08-27, 5 of them closed). Falls back to the lexical path if
 // realpath throws, which only ever narrows the exemption.
-let promptBase;
+let realAbs;
 try {
-  promptBase = path.basename(fs.realpathSync(target.abs));
+  realAbs = fs.realpathSync(target.abs);
 } catch {
-  promptBase = path.basename(target.abs);
+  realAbs = target.abs;
 }
+const promptBase = path.basename(realAbs);
 // Ceiling uses the post-offset REMAINDER, matching the would-block rule at the `counted.lines
 // - offset` line above. Testing whole-file lines here contradicted it: a 2000-line prompt read
 // with offset:1500 (500 lines into context) blocked, while a 1000-line whole-file prompt — twice
@@ -262,6 +311,23 @@ if (
     lines: counted.exact ? counted.lines : null,
     exact: counted.exact,
     action: 'exempt-prompt',
+  });
+  process.exit(0);
+}
+
+// Session-spill exemption (rationale at SPILL_SCRATCHPAD below). Same placement as the two
+// exemptions above: after the would-block decision, logged, so the rate stays a measurement.
+// Same ceiling conjuncts as the prompt exemption, so a 1200-line spill still blocks.
+if (
+  spillOwner(realAbs) === sessionId() &&
+  counted.exact &&
+  counted.lines - offset <= limit * PROMPT_CEILING_MULTIPLE
+) {
+  telemetry({
+    path: target.abs,
+    lines: counted.exact ? counted.lines : null,
+    exact: counted.exact,
+    action: 'exempt-spill',
   });
   process.exit(0);
 }

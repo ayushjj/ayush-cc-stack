@@ -34,7 +34,9 @@
 //   entry genuinely belongs in this commit, take the skip valve and say so.
 //
 // Skip entirely: CLAUDE_D_ENTRY_TIMING_SKIP=1
-// Warn-only:    CLAUDE_D_ENTRY_TIMING_WARN_ONLY=1
+// Warn-only:    CLAUDE_D_ENTRY_TIMING_WARN_ONLY=1 — the DEFAULT since S81 (settings.json env).
+//               To get the block back, remove that env line from settings.json; a command
+//               prefix cannot turn it off (the env is read first).
 
 'use strict';
 
@@ -548,15 +550,25 @@ const msg = [
   '   the commit message why the entry could not be authored inline:',
   '     CLAUDE_D_ENTRY_TIMING_SKIP=1 git commit -m "..."',
   '',
-  '   Warn-only for a session: CLAUDE_D_ENTRY_TIMING_WARN_ONLY=1 <command>',
+  '   Warn-only is the default (settings.json env); remove that line to block.',
   '',
   '   Both forms are read from the command itself as well as the environment,',
   '   and every use is appended to ~/.claude/.hook-overrides.log.',
   '════════════════════════════════════════════════════════════════',
 ];
 
+// Warn-only (default since S81 via settings.json env — owner OK after a replay trial where Opus
+// authored D-entries at decision time 6/6 and this block fired on all 6 correct commits): the
+// warning must ride warnModel, because exit-0 stderr never reaches the model. Block mode keeps
+// stderr + exit 2, which the harness does show the model.
+// The settings.json default is read directly — NOT via bypassed(), which logs every call to
+// .hook-overrides.log and would count each routine warning as an "override" in /hook-review's
+// bypass rates (review). bypassed() still handles the inline per-command form.
+if (process.env.CLAUDE_D_ENTRY_TIMING_WARN_ONLY === '1'
+    || hookLib.bypassed('CLAUDE_D_ENTRY_TIMING_WARN_ONLY', command, { appliesTo: ['git'] })) {
+  hookLib.warnModel(msg.join('\n'));
+  process.exit(0);
+}
+
 process.stderr.write(msg.join('\n') + '\n');
-
-if (hookLib.bypassed('CLAUDE_D_ENTRY_TIMING_WARN_ONLY', command, { appliesTo: ['git'] })) process.exit(0);
-
 process.exit(2);
